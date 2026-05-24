@@ -1,158 +1,106 @@
 # OpenHeart
 
-有温度的虚拟伙伴。A multi-modal virtual companion system with emotion-aware dialogue, visual perception, personality evolution, and Live2D avatar rendering.
+**有温度的 AI 虚拟伙伴 / A Virtual Companion That Cares**
 
-## Quick Start
+OpenHeart 是一款多模态 AI 虚拟伙伴，集成语音对话、实时屏幕视觉感知、五层记忆系统和 Live2D 可交互形象。她在本地 GPU 上运行（RTX 3080 Ti 16GB），能看见你的屏幕、听见你的声音、记住你们的过去。
+
+OpenHeart is a multi-modal AI companion with voice dialogue, real-time screen perception, a 5-tier memory system, and a Live2D interactive avatar. She runs on local GPU (RTX 3080 Ti 16GB), sees your screen, hears your voice, and remembers your shared history.
+
+---
+
+## 语音闭环 / Voice Closed Loop (Working)
+
+```
+Mic (parec) → SenseVoice ASR (funasr) → DeepSeek API → CosyVoice3-0.5B TTS (vLLM) → Speaker (paplay)
+```
+
+一键启动：`python scripts/demo_full.py`
+
+Single command to launch the full pipeline: `python scripts/demo_full.py`
+
+## 屏幕视觉 / Screen Vision (Working)
+
+Two-stage YOLOE detection pipeline + VLM concept learning:
+
+- **RegionProposer**: YOLOE-small PF mode (~0.3 GB VRAM, ~17ms), outputs raw bounding boxes
+- **ConceptClassifier**: YOLOE-large SAVPE/text-prompt (~0.7 GB VRAM, ~100ms), classifies with learned visual prompts
+- **PromptLearner**: MiniCPM-V-4.6 (cloud API at api.modelbest.cn) learns new concepts into PromptMemory (68+ concepts stored)
+- **OCR**: EasyOCR on window crops
+- **SpatialGraph + EntityGraph**: track spatial relationships across frames via networkx
+- **ReflectionEngine**: background 5s loop, discovers patterns from EntityGraph → stored in deep memory
+
+## 五层记忆 / 5-Tier Memory
+
+| Tier | Backend | Role |
+|------|---------|------|
+| HOT (T0) | Redis Stream | Raw session data (30s TTL) |
+| WARM (T1) | Redis Hash | Active context (24h TTL) |
+| CORE (T2) | LanceDB | Important episodes (promotion ≥0.7) |
+| COLD (T3) | LanceDB | Long-term archive (24h sync) |
+| DEEP (T4) | LanceDB | Pattern insights (min 3 occurrences) |
+
+Extra: **RetrievalGate** (composite scoring: recency 0.4, relevance 0.4, importance 0.2), **EntityGraph**, **ReflectionEngine**, **query_visual** tool for LLM.
+
+## Live2D 虚拟形象 / Live2D Avatar
+
+Electron app at `electron-l2d/`. WebSocket bridge (port 9876) to Python.
+
+- **Mouth sync**: start/finish signals from TTS
+- **Eye tracking**: global cursor polling (33ms)
+- **Expressions**: smile, sad, surprised, blush, glasses, elf_ears, dark_face (xiaoyue model)
+- **Transparent window**, click-through mode (Ctrl+Shift+P)
+
+## 控制面板 / Control Panel
+
+`frontend/index.html` — API config, persona editor, module toggles, status panel, one-click start + progress bar.
+
+## 技术栈 / Tech Stack
+
+| Category | Components |
+|----------|-----------|
+| **GPU** | NVIDIA RTX 3080 Ti 16GB |
+| **ASR** | SenseVoice (funasr, iic/SenseVoiceSmall) |
+| **LLM** | DeepSeek API (stream_decide) |
+| **TTS** | CosyVoice3-0.5B (vLLM, ~4.8 GB) |
+| **Vision** | YOLOE-v8s (PF + SAVPE, ~1.5 GB total) + MiniCPM-V-4.6 (cloud API) |
+| **OCR** | EasyOCR (PaddleOCR-ONNX backend) |
+| **Memory** | Redis 7.2 (Stream/Hash) + LanceDB |
+| **Avatar** | Electron + PixiJS + pixi-live2d-display (Cubism 4) |
+| **Personality** | 雪奈 — tsundere/gremlin/哥们 style (prompt_modules.json) |
+
+## VRAM 占用 / VRAM Usage
+
+| Component | VRAM |
+|-----------|------|
+| CosyVoice3 (vLLM) | ~4.8 GB |
+| YOLOE (RegionProposer + ConceptClassifier) | ~1.5 GB total |
+| SenseVoice | ~250 MB |
+| VLM (MiniCPM-V-4.6) | 0 GB (cloud API) |
+
+Startup auto-detects VRAM tier (HIGH ≥12 GB / LOW <12 GB).
+
+## 快速开始 / Quick Start
 
 ```bash
-# 1. Environment setup
-bash scripts/setup_env.sh   # creates conda env 'openheart', installs deps
+# 1. 安装依赖 / Install dependencies
+conda create -n openheart python=3.11 -y
+bash scripts/setup_env.sh
 
-# 2. Activate and download models
-conda activate openheart
-python scripts/download_models.py --download
+# 2. 启动 Redis / Start Redis
+redis-server
 
-# 3. Start infrastructure (Redis + LanceDB)
-docker compose up -d
+# 3. 设置 API 密钥 / Set API keys
+export DEEPSEEK_API_KEY="sk-..."
+export VLM_API_KEY="sk-..."
 
-# 4. Run in mock mode (no GPU required)
-python run.py --mode=mock
+# 4. 运行语音 Demo / Run voice demo
+python scripts/demo_full.py
 
-# Or run with full GPU pipeline
-python run.py --mode=real --vram-tier=auto
+# 5. （可选）启动 Live2D + 控制面板 / (Optional) Start L2D + panel
+cd electron-l2d && npm start    # Live2D avatar
+python frontend/server.py       # Control panel at http://localhost:8000
 ```
 
-For VRAM constrained setups, use `--vram-tier=low` or `--vram-tier=mid` to disable compute-heavy components automatically.
+---
 
-## Requirements
-
-| Component | Minimum |
-|---|---|
-| Python | >= 3.11 |
-| GPU VRAM (high tier) | >= 15.5 GB |
-| GPU VRAM (medium tier) | >= 11.5 GB |
-| GPU VRAM (low tier) | >= 7.5 GB |
-| RAM | >= 16 GB |
-| Redis | >= 7.2 (with Stream) |
-| Docker | recommended for infra services |
-
-VRAM tier is auto-detected at startup. See [VRAM tiers](#) for which models run at each tier.
-
-## Architecture
-
-The system follows a 7-layer pipeline:
-
-```
-Input                      ┌─────────────┐
-  │ Screen + Audio + Mouse │ Perception  │  Visual: YOLO-World, YOLOv11n, PaddleOCR, TinyCLIP
-  ▼                        │ (4-lane)    │  Audio: VAD, ASR (Whisper), emotion, ring buffer
-┌───────────┐              └──────┬──────┘
-│ Perception│                     │ vision_snapshot + audio_event
-└─────┬─────┘                     │
-      │              ┌────────────▼──────┐
-      ├──────────────│ Fusion            │  Time-window fusion, event classification
-      │              │ (time_window)     │  Entity alignment, scene synthesis
-      │              └────────┬──────────┘
-      │                       │ Scene
-      │              ┌────────▼──────────┐
-      ├──────────────│ Memory            │  Hot: Redis + networkx graph (session)
-      │              │ (hot + cold)      │  Cold: LanceDB (long-term, filtered)
-      │              └────────┬──────────┘
-      │                       │ context + user_model
-      │              ┌────────▼──────────┐
-      │              │ Personality       │  Baseline + preference shift + emotion adj.
-      │              │ (dynamic fusion)  │  PersonaAuditor guards against drift
-      │              └────────┬──────────┘
-      │                       │ dynamic persona
-      │              ┌────────▼──────────┐
-      ├──────────────│ Decision          │  Qwen2.5-3B (GPTQ 4bit) + optional shadow
-      │              │ (main + shadow)   │  Fast-path matcher [已废弃 v5.0], reflex rules, cloud fallback [已废弃 v5.0]
-      │              └────────┬──────────┘
-      │                       │ command + confidence
-      │              ┌────────▼──────────┐
-      │              │ Prediction        │  Gentle reminder, proactive suggestions
-      │              │ (proactive)       │
-      │              └────────┬──────────┘
-      │                       │ action_sequence
-      │              ┌────────▼──────────┐
-      │              │ Execution         │  ActionSequenceScheduler channels:
-      │              │ (scheduler)       │  avatar (Live2D / FallbackTextBubble)
-      ▼              │                   │  voice (CosyVoice TTS)
-Action               │                   │  mouse (keyboard + mouse control)
-                     └───────────────────┘
-```
-
-Each layer communicates via a unified message envelope (`trace_id`, `source_layer`, `version`, `metadata.degraded`). Every capability has a local fallback -- no hard cloud dependency.
-
-## Configuration
-
-All config files live in `config/` and must match the spec exactly:
-
-| File | Purpose |
-|---|---|
-| `model_paths.yaml` | Local paths to all model weights |
-| `thresholds.yaml` | Detection and confidence thresholds |
-| `emotion_params.yaml` | Emotion classifier parameters |
-| `fast_path_rules.yaml` | Reflex rule definitions |
-| `audio.yaml` | Audio pipeline settings |
-| `sentiment.yaml` | Sentiment provider (default / structbert) |
-| `transcript_overlay.yaml` | Transcript display settings |
-| `live2d.yaml` | Live2D renderer config |
-| `endpoints.yaml` | Cloud service endpoints |
-| `memory.yaml` | Hot/cold memory parameters |
-| `easter_eggs.json` | Easter egg triggers and responses |
-
-## Testing
-
-```bash
-# All tests
-pytest tests/ -v
-
-# Contract tests only (module completeness gate)
-pytest tests/contracts/ -v
-bash tests/run_all_contracts.sh
-```
-
-Contract tests are the primary completeness gate. A module is done only when its contract test passes. See `tests/contracts/` for per-layer contracts.
-
-## Project Structure
-
-```
-├── config/               # YAML/JSON configuration files
-├── models/               # Downloaded model weights (gitignored)
-├── rules/                # Reflex rules (template, core, interactive, user-taught)
-├── scripts/              # setup_env.sh, download_models.py, validate_env.py
-├── src/
-│   ├── perception/       # 4-lane visual + audio sensing
-│   ├── fusion/           # Time-window, event classification, scene synthesis
-│   ├── memory/           # Hot (Redis) + Cold (LanceDB) memory
-│   ├── personality/      # Baseline, preference shift, dynamic fusion
-│   ├── decision/         # Main 3B + shadow 1.5B verifier, fast-path, reflex
-│   ├── prediction/       # Proactive gentle reminders
-│   └── execution/        # Action scheduler, avatar/voice/mouse channels
-├── tests/
-│   ├── contracts/        # Contract tests (one per module)
-│   ├── unit/             # Unit tests
-│   ├── integration/      # Integration tests
-│   ├── mocks/            # Mock implementations
-│   ├── fixtures/         # Test data
-│   └── performance/      # Performance benchmarks
-└── run.py                # Entry point
-```
-
-## Development
-
-See [AGENTS.md](AGENTS.md) for detailed development conventions, naming rules, and the full specification document index.
-
-Key development rules:
-- Contract-driven: write tests first, then implement
-- Vertical-slice: build end-to-end feature chains, not horizontal layers
-- All try/except blocks must document what exception is caught and why it is safe
-- All errors log at WARNING level with `trace_id`
-- Emotion output is restricted to `joy`, `sadness`, `neutral` (`anger`/`surprise` are placeholders)
-- Context truncation happens in `ContextAssembler` at message boundaries, never in tokenization
-- Default context limit: 2048 tokens (4096 in performance mode with re-validation)
-
-## License
-
-Proprietary. See license file for details.
+*OpenHeart — 不只是 AI，而是有温度的陪伴。 / Not just AI, but a companion with warmth.*
