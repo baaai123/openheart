@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>OpenHeart — Control Panel</title>
+<style>
+:root {
+  --bg: #0d0d15;
+  --surface: #161622;
+  --surface2: #1e1e32;
+  --border: #2a2a40;
+  --text: #e8e8f0;
+  --text2: #a0a0b8;
+  --muted: #6c6c88;
+  --primary: #6c5ce7;
+  --primary-glow: rgba(108,92,231,.25);
+  --accent: #00d4aa;
+  --warn: #f59e0b;
+  --danger: #ff4477;
+  --radius: 10px;
+  --font: 'Inter',system-ui,-apple-system,sans-serif;
+  --mono: 'JetBrains Mono','Fira Code',monospace;
+}
+@font-face{font-family:'Inter';font-style:normal;font-weight:400;src:local('Inter')}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--font);height:100vh;overflow:hidden}
+/* scrollbar */
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+
+/* ── Header ── */
+header{
+  display:flex;align-items:center;padding:10px 20px;
+  border-bottom:1px solid var(--border);gap:12px;flex-shrink:0;
+  background:var(--surface)
+}
+header .logo{
+  width:26px;height:26px;border-radius:50%;
+  background:linear-gradient(135deg,var(--primary),var(--accent));
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700
+}
+header h1{font-size:16px;font-weight:600;letter-spacing:.3px}
+header .subtitle{font-size:12px;color:var(--muted);margin-left:4px}
+header .spacer{flex:1}
+.status-summary{display:flex;gap:14px;align-items:center}
+.status-item{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted);transition:.3s}
+.dot.on{background:var(--accent);box-shadow:0 0 6px var(--accent)}
+.dot.off{background:var(--danger);box-shadow:0 0 6px var(--danger)}
+
+/* ── Layout ── */
+.app{display:grid;grid-template-columns:320px 1fr;height:calc(100vh - 50px);overflow:hidden}
+.sidebar{
+  padding:14px;overflow-y:auto;border-right:1px solid var(--border);
+  display:flex;flex-direction:column;gap:12px;background:var(--surface)
+}
+.main{display:flex;flex-direction:column;overflow:hidden}
+.chat-area{flex:1;overflow-y:auto;padding:16px}
+.visual-area{
+  height:180px;border-top:1px solid var(--border);padding:12px 16px;
+  overflow-y:auto;background:var(--surface);flex-shrink:0
+}
+
+/* ── Cards ── */
+.card{
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius);padding:12px
+}
+.card-title{
+  font-size:12px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.8px;color:var(--muted);margin-bottom:8px;
+  display:flex;align-items:center;gap:6px
+}
+.card-title .icon{font-size:14px}
+.field{margin-bottom:8px}
+.field:last-child{margin-bottom:0}
+.field label{display:block;font-size:12px;color:var(--text2);margin-bottom:3px}
+.field input,.field textarea{
+  width:100%;padding:7px 10px;border:1px solid var(--border);
+  border-radius:6px;background:var(--surface);color:var(--text);
+  font-size:13px;font-family:var(--font);outline:none;transition:.2s
+}
+.field input:focus,.field textarea:focus{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary-glow)}
+.field textarea{resize:vertical;min-height:48px;font-family:var(--mono);font-size:12px}
+
+/* ── Toggles ── */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0}
+.toggle-row:not(:last-child){border-bottom:1px solid var(--border)}
+.toggle-label{font-size:13px;color:var(--text2)}
+.toggle-switch{
+  position:relative;width:36px;height:20px;cursor:pointer;
+  background:var(--border);border-radius:10px;transition:.2s;flex-shrink:0
+}
+.toggle-switch.active{background:var(--primary)}
+.toggle-switch::after{
+  content:'';position:absolute;top:2px;left:2px;
+  width:16px;height:16px;border-radius:50%;background:var(--text);
+  transition:.2s
+}
+.toggle-switch.active::after{left:18px;background:#fff}
+
+/* ── Status Lights ── */
+.light-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.light-item{
+  display:flex;align-items:center;gap:8px;
+  padding:6px 8px;border-radius:6px;font-size:12px;color:var(--text2)
+}
+.light-item .dot{width:6px;height:6px;flex-shrink:0}
+.light-item .lbl{flex:1}
+.light-item .val{font-size:11px;color:var(--muted);font-family:var(--mono)}
+
+/* ── Start Button ── */
+.start-btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;padding:10px;border:none;border-radius:var(--radius);
+  background:linear-gradient(135deg,var(--primary),#8b5cf6);
+  color:#fff;font-size:14px;font-weight:600;cursor:pointer;
+  transition:.2s;font-family:var(--font);position:relative;overflow:hidden
+}
+.start-btn:hover{filter:brightness(1.12)}
+.start-btn:active{transform:scale(.98)}
+.start-btn.running{background:var(--border);pointer-events:none;cursor:wait}
+.start-btn .spinner{display:none;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
+.start-btn.running .spinner{display:block}
+.start-btn.running .label-text{opacity:.7}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Progress Bar ── */
+.progress-wrap{display:none;margin-top:6px}
+.progress-wrap.visible{display:block}
+.progress-track{
+  height:4px;background:var(--border);border-radius:2px;overflow:hidden
+}
+.progress-fill{
+  height:100%;width:0%;background:linear-gradient(90deg,var(--primary),var(--accent));
+  border-radius:2px;transition:width .3s ease
+}
+.progress-text{font-size:11px;color:var(--muted);margin-top:3px;text-align:center;font-family:var(--mono)}
+
+/* ── Chat Messages ── */
+.msg{margin-bottom:10px;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.msg .bubble{
+  display:inline-block;max-width:85%;
+  padding:8px 14px;border-radius:12px;font-size:13px;line-height:1.5
+}
+.msg.user{text-align:right}
+.msg.user .bubble{
+  background:var(--primary);color:#fff;
+  border-bottom-right-radius:4px
+}
+.msg.assistant .bubble{
+  background:var(--surface2);border:1px solid var(--border);
+  border-bottom-left-radius:4px
+}
+.msg .meta{font-size:11px;color:var(--muted);margin-top:3px;padding:0 4px}
+
+/* ── Visual Preview ── */
+.viz-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;height:100%}
+.viz-col h3{font-size:11px;color:var(--muted);font-weight:500;margin-bottom:4px;text-transform:uppercase;letter-spacing:.6px}
+.viz-tags{display:flex;flex-wrap:wrap;gap:4px}
+.viz-tag{
+  padding:2px 8px;border-radius:4px;font-size:11px;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text2)
+}
+.viz-tag.highlight{border-color:var(--primary);color:var(--primary)}
+.viz-ocr{font-size:11px;color:var(--text2);line-height:1.6;font-family:var(--mono);white-space:pre-wrap}
+
+/* ── Empty state ── */
+.empty-state{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;color:var(--muted);text-align:center;padding:20px
+}
+.empty-state .big-icon{font-size:36px;margin-bottom:8px;opacity:.4}
+.empty-state p{font-size:13px;max-width:280px;line-height:1.5}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">♥</div>
+  <h1>OpenHeart</h1>
+  <span class="subtitle">v4.5.0 · Control Panel</span>
+  <div class="spacer"></div>
+  <div class="status-summary">
+    <div class="status-item"><span class="dot" id="dot-voice"></span>Voice</div>
+    <div class="status-item"><span class="dot" id="dot-visual"></span>Visual</div>
+    <div class="status-item"><span class="dot" id="dot-l2d"></span>L2D</div>
+  </div>
+</header>
+
+<div class="app">
+  <div class="sidebar">
+
+
+    <div class="card">
+      <div class="card-title"><span class="icon">⚙</span>API Config</div>
+      <div class="field">
+        <label>Base URL</label>
+        <input type="text" id="api-baseurl" placeholder="http://localhost:8000">
+      </div>
+      <div class="field">
+        <label>Model Name</label>
+        <input type="text" id="api-model" placeholder="Qwen2.5-3B">
+      </div>
+      <div class="field">
+        <label>API Key</label>
+        <input type="password" id="api-key" placeholder="sk-...">
+      </div>
+      <button onclick="saveConfig()" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text2);font-size:12px;cursor:pointer;font-family:var(--font);transition:.2s;margin-top:4px"
+        onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">Save Config</button>
+    </div>
+
+
+    <div class="card">
+      <div class="card-title"><span class="icon">👤</span>Persona</div>
+      <div class="field">
+        <textarea id="persona-input" rows="3" placeholder="Describe the AI's personality, tone, and behavior..."></textarea>
+      </div>
+      <button onclick="savePersona()" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text2);font-size:12px;cursor:pointer;font-family:var(--font);transition:.2s"
+        onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'">Apply Persona</button>
+    </div>
+
+
+    <div class="card">
+      <div class="card-title"><span class="icon">🔀</span>Modes</div>
+      <div class="toggle-row">
+        <span class="toggle-label">Voice Input</span>
+        <div class="toggle-switch active" id="tog-voice" onclick="toggleSwitch(this)"></div>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">Visual Module</span>
+        <div class="toggle-switch active" id="tog-visual" onclick="toggleSwitch(this)"></div>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">Live2D</span>
+        <div class="toggle-switch active" id="tog-l2d" onclick="toggleSwitch(this)"></div>
+      </div>
+    </div>
+
+
+    <div class="card">
+      <div class="card-title"><span class="icon">●</span>Module Status</div>
+      <div class="light-grid">
+        <div class="light-item"><span class="dot" id="lt-voice"></span><span class="lbl">Voice</span><span class="val" id="lt-voice-val">─</span></div>
+        <div class="light-item"><span class="dot" id="lt-visual"></span><span class="lbl">Visual</span><span class="val" id="lt-visual-val">─</span></div>
+        <div class="light-item"><span class="dot" id="lt-l2d"></span><span class="lbl">Live2D</span><span class="val" id="lt-l2d-val">─</span></div>
+        <div class="light-item"><span class="dot" id="lt-asr"></span><span class="lbl">ASR</span><span class="val" id="lt-asr-val">─</span></div>
+      </div>
+    </div>
+
+
+    <button class="start-btn" id="start-btn" onclick="startBackend()">
+      <span class="spinner"></span>
+      <span class="label-text">▶ Start Backend</span>
+    </button>
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="progress-text" id="progress-text">Initializing...</div>
+    </div>
+
+  </div>
+
+  <div class="main">
+    <div class="chat-area" id="chat-area">
+      <div class="empty-state" id="empty-state">
+        <div class="big-icon">💬</div>
+        <p>Configure API settings, set a persona, and press <strong>Start Backend</strong> to begin the conversation.</p>
+      </div>
+      <div id="chat-messages" style="display:none"></div>
+    </div>
+
+    <div class="visual-area" id="visual-area">
+      <div class="viz-grid">
+        <div class="viz-col">
+          <h3>Detected Concepts</h3>
+          <div class="viz-tags" id="viz-concepts">
+            <span style="color:var(--muted);font-size:11px">Waiting for visual data...</span>
+          </div>
+        </div>
+        <div class="viz-col">
+          <h3>OCR Text</h3>
+          <div class="viz-ocr" id="viz-ocr">Waiting for visual data...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Config (localStorage) ──
+
+const CONFIG_KEY = 'openheart_config';
+const PERSONA_KEY = 'openheart_persona';
+
+function loadConfig() {
+  try {
+    const saved = localStorage.getItem(CONFIG_KEY);
+    if (saved) {
+      const c = JSON.parse(saved);
+      document.getElementById('api-baseurl').value = c.baseurl || '';
+      document.getElementById('api-model').value = c.model || '';
+      document.getElementById('api-key').value = c.apiKey || '';
+    }
+  } catch(e) {}
+}
+
+function saveConfig() {
+  const config = {
+    baseurl: document.getElementById('api-baseurl').value.trim(),
+    model: document.getElementById('api-model').value.trim(),
+    apiKey: document.getElementById('api-key').value
+  };
+  localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+  showToast('Config saved to localStorage');
+}
+
+function loadPersona() {
+  try {
+    const saved = localStorage.getItem(PERSONA_KEY);
+    if (saved) document.getElementById('persona-input').value = saved;
+  } catch(e) {}
+}
+
+function savePersona() {
+  const val = document.getElementById('persona-input').value;
+  localStorage.setItem(PERSONA_KEY, val);
+  showToast('Persona saved');
+}
+
+// ── Toggles ──
+
+function toggleSwitch(el) {
+  el.classList.toggle('active');
+  const id = el.id;
+  const statusId = id.replace('tog-', 'dot-');
+  const dot = document.getElementById(statusId);
+  if (dot) {
+    dot.className = el.classList.contains('active') ? 'dot on' : 'dot off';
+  }
+}
+
+// ── Toast ──
+
+let toastEl = null;
+function showToast(msg) {
+  if (!toastEl) {
+    toastEl = document.createElement('div');
+    toastEl.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:8px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text2);z-index:999;transition:.3s;opacity:0;font-family:var(--font)';
+    document.body.appendChild(toastEl);
+  }
+  toastEl.textContent = msg;
+  toastEl.style.opacity = '1';
+  clearTimeout(toastEl._hide);
+  toastEl._hide = setTimeout(() => { toastEl.style.opacity = '0'; }, 2000);
+}
+
+// ── Backend Start with Fake Progress ──
+
+let backendRunning = false;
+let progressInterval = null;
+let progressPhase = 0;
+
+function startBackend() {
+  const btn = document.getElementById('start-btn');
+  const wrap = document.getElementById('progress-wrap');
+  const fill = document.getElementById('progress-fill');
+  const text = document.getElementById('progress-text');
+
+  if (backendRunning) return;
+  backendRunning = true;
+  btn.classList.add('running');
+  btn.querySelector('.label-text').textContent = 'Starting...';
+  wrap.classList.add('visible');
+
+  progressPhase = 0;
+  fill.style.width = '0%';
+
+  const stages = [
+    { at: 8, label: 'Loading config...' },
+    { at: 18, label: 'Initializing models...' },
+    { at: 30, label: 'Loading Whisper...' },
+    { at: 42, label: 'Loading Qwen2.5...' },
+    { at: 55, label: 'Starting CosyVoice...' },
+    { at: 65, label: 'Connecting Redis...' },
+    { at: 75, label: 'Starting Live2D thread...' },
+    { at: 85, label: 'Warming up pipelines...' },
+    { at: 94, label: 'Almost ready...' },
+  ];
+
+  let stageIdx = 0;
+  let currentProgress = 0;
+  const stepDuration = 400;
+
+  progressInterval = setInterval(() => {
+    if (stageIdx < stages.length) {
+      const target = stages[stageIdx].at;
+      if (currentProgress < target) {
+        currentProgress += Math.max(0.5, (target - currentProgress) / 4);
+      } else {
+        text.textContent = stages[stageIdx].label;
+        stageIdx++;
+      }
+    } else {
+      if (currentProgress < 98) {
+        currentProgress += 0.3;
+      } else {
+        clearInterval(progressInterval);
+        progressInterval = null;
+        completeStartup();
+        return;
+      }
+    }
+    fill.style.width = Math.min(currentProgress, 99) + '%';
+  }, stepDuration);
+}
+
+function completeStartup() {
+  const fill = document.getElementById('progress-fill');
+  const text = document.getElementById('progress-text');
+  const btn = document.getElementById('start-btn');
+
+  fill.style.width = '100%';
+  text.textContent = '✅ Backend ready!';
+
+  setStatus('voice', true);
+  setStatus('visual', true);
+  setStatus('l2d', true);
+  setStatus('asr', true);
+
+  setTimeout(() => {
+    btn.classList.remove('running');
+    btn.querySelector('.label-text').textContent = '● Running';
+  }, 500);
+
+  addMessage('assistant', 'System ready. How can I help you?', 'system');
+}
+
+function setStatus(module, online) {
+  const dots = ['lt-' + module, 'dot-' + module];
+  dots.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.className = online ? 'dot on' : 'dot off';
+  });
+  const valEl = document.getElementById('lt-' + module + '-val');
+  if (valEl) valEl.textContent = online ? 'online' : 'offline';
+}
+
+// ── Chat ──
+
+function addMessage(role, content, meta) {
+  const container = document.getElementById('chat-messages');
+  const empty = document.getElementById('empty-state');
+  if (empty) empty.style.display = 'none';
+  container.style.display = 'block';
+
+  const msg = document.createElement('div');
+  msg.className = 'msg ' + role;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = content;
+  msg.appendChild(bubble);
+
+  if (meta) {
+    const m = document.createElement('div');
+    m.className = 'meta';
+    m.textContent = meta;
+    msg.appendChild(m);
+  }
+
+  container.appendChild(msg);
+  const area = document.getElementById('chat-area');
+  area.scrollTop = area.scrollHeight;
+}
+
+// ── Simulate visual detection updates ──
+
+function updateVisual(concepts, ocrText) {
+  const cEl = document.getElementById('viz-concepts');
+  const oEl = document.getElementById('viz-ocr');
+  if (concepts && concepts.length) {
+    cEl.innerHTML = concepts.map(t => 
+      `<span class="viz-tag ${t.conf > 0.7 ? 'highlight' : ''}">${t.label} ${Math.round(t.conf*100)}%</span>`
+    ).join('');
+  }
+  if (ocrText) {
+    oEl.textContent = ocrText;
+  }
+}
+
+// ── Demo simulation (for testing without backend) ──
+
+setTimeout(() => {
+  if (!backendRunning) {
+    setStatus('voice', false);
+    setStatus('visual', false);
+    setStatus('l2d', true);
+    setStatus('asr', false);
+  }
+}, 500);
+
+// ── Init ──
+
+loadConfig();
+loadPersona();
+
+document.querySelectorAll('.toggle-switch').forEach(el => {
+  const id = el.id.replace('tog-', 'dot-');
+  const dot = document.getElementById(id);
+  if (dot) {
+    dot.className = el.classList.contains('active') ? 'dot on' : 'dot off';
+  }
+});
+</script>
+</body>
+</html>

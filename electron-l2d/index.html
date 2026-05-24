@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 500px;
+      height: 900px;
+      overflow: hidden;
+      background: transparent;
+    }
+    #l2d {
+      display: block;
+      width: 500px;
+      height: 900px;
+      -webkit-app-region: drag;
+    }
+    #placeholder {
+      display: none;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #888;
+      font-family: sans-serif;
+      font-size: 13px;
+      text-align: center;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="l2d" width="2500" height="3750"></canvas>
+  <div id="placeholder">模型加载中...</div>
+
+  <!-- Polyfill Node.js globals for Cubism SDK (contextIsolation blocks them) -->
+  <script>window.process = { env: { NODE_ENV: 'production' } }</script>
+
+  <!-- Cubism 4 Core Runtime — must load before pixi-live2d-display -->
+  <script src="./lib/live2dcubismcore.min.js"></script>
+
+  <!-- PixiJS v7 -->
+  <script src="./node_modules/pixi.js/dist/pixi.min.js"></script>
+
+  <!-- pixi-live2d-display Cubism 4 bundle (attaches to PIXI.live2d) -->
+  <script src="./node_modules/pixi-live2d-display/dist/cubism4.min.js"></script>
+
+  <!-- Our Live2D renderer -->
+  <script src="./renderer.js"></script>
+</body>
+</html>

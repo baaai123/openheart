@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; }
+  body { background:#222; display:flex; flex-direction:column; align-items:center; }
+  canvas { display:block; }
+  #info { color:white; font-family:monospace; padding:10px; background:rgba(0,0,0,0.8); }
+</style>
+</head>
+<body>
+  <canvas id="l2d" width="400" height="800"></canvas>
+  <div id="info">Loading...</div>
+
+  <script>window.process = { env: { NODE_ENV: 'production' } }</script>
+  <script src="./lib/live2dcubismcore.min.js"></script>
+  <script src="./node_modules/pixi.js/dist/pixi.min.js"></script>
+  <script src="./node_modules/pixi-live2d-display/dist/cubism4.min.js"></script>
+
+  <script>
+    (async function() {
+      var info = document.getElementById('info');
+      var canvas = document.getElementById('l2d');
+
+      info.textContent = 'Creating PIXI app...';
+      var app = new PIXI.Application({ view: canvas, width: 400, height: 800, backgroundAlpha: 0 });
+
+      info.textContent = 'Loading xiaoyue model...';
+      var Live2DModel = PIXI.live2d.Live2DModel;
+      var model = await Live2DModel.from('./models/xiaoyue/xiaoyue.model3.json');
+
+      model.scale.set(0.15);
+      model.x = 200;
+      model.y = 500;
+      if (model.anchor) model.anchor.set(0.5, 0.5);
+      app.stage.addChild(model);
+
+      info.textContent = 'Model loaded! Starting mouth test...';
+
+      var coreModel = model.internalModel.coreModel;
+      var t0 = performance.now();
+
+      // Phase 1: slow sine-wave mouth open/close (2-second period)
+      function phase1() {
+        var t = (performance.now() - t0) / 1000;
+        var mouthValue = 0.5 + 0.5 * Math.sin(t * Math.PI);
+        coreModel.setParameterValueById('ParamMouthOpenY', mouthValue);
+        coreModel.update();
+        info.textContent = 'Mouth: ' + mouthValue.toFixed(3) + ' (sin wave test)';
+      }
+
+      app.ticker.add(phase1);
+
+      // Phase 2: rapid RMS-style changes (starts after 6 seconds)
+      setTimeout(function() {
+        app.ticker.remove(phase1);
+        info.textContent = 'Testing rapid RMS-style mouth...';
+        var phase = 0;
+        function phase2() {
+          phase += 0.2;
+          var val = Math.abs(Math.sin(phase)) * Math.random();
+          coreModel.setParameterValueById('ParamMouthOpenY', Math.min(val, 1.0));
+          coreModel.update();
+          info.textContent = 'Mouth (RMS): ' + val.toFixed(3);
+        }
+        app.ticker.add(phase2);
+      }, 6000);
+
+    })().catch(function(e) {
+      document.getElementById('info').textContent = 'ERROR: ' + e.message;
+      console.error(e);
+    });
+  </script>
+</body>
+</html>

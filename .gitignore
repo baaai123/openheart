@@ -76,3 +76,4 @@ electron-l2d/node_modules/
 *.ts
 data/
 logs/
+electron-l2d/node_modules/
