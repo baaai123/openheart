@@ -1,0 +1,29 @@
+# v4.5.0 — Transcript overlay window configuration
+# Independent floating text window driven by voice_channel for TTS text display.
+# Decoupled from avatar rendering and mouse control.
+
+enabled: true
+font_size: 32
+color: "#FFFFFF"
+background: "#000000"
+opacity: 0.7
+position: "auto"
+word_highlight: true
+mouse_pass_through: true
+idle_hide_seconds: 300
+
+# Conversation area (Task 3)
+conversation_enabled: true
+max_conversation_lines: 10
+conversation_font_size: 18
+conversation_bg: "#1a1a2e"
+user_color: "#7ec8e3"
+assistant_color: "#ffb7c5"
+separator_color: "#333355"
+
+# Window size (used when conversation_enabled)
+width: 900
+height: 420
+
+# L2D-aware positioning (used when position: "auto")
+l2d_window_title: "Live2D"

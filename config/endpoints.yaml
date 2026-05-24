@@ -1,0 +1,34 @@
+# v4.5.0 — Service endpoints
+# All local-first; cloud endpoints are optional fallbacks only.
+# Redis: required for hot memory (AOF persistence).
+# CosyVoice: GPU gRPC primary, CPU WebSocket fallback.
+
+redis:
+  host: "localhost"
+  port: 6379
+  db: 0
+
+cosyvoice:
+  grpc:
+    host: "localhost"
+    port: 50051
+  ws:
+    host: "localhost"
+    port: 50052
+
+whisper:
+  # whisper.cpp runs locally via pywhispercpp binding
+
+cloud_fallback:
+  # Cloud LLM backup — only used when local 3B model fails twice consecutively
+  enabled: false
+  endpoint: ""
+  api_key: ""
+
+# DeepSeek cloud API — primary cloud LLM provider
+deepseek:
+  api_key: "${DEEPSEEK_API_KEY}"
+  base_url: "https://api.deepseek.com/v1"
+  model: "deepseek-v4-flash"
+  max_tokens: 200
+  temperature: 0.8

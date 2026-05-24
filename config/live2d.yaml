@@ -1,0 +1,28 @@
+# v4.5.0 — Live2D renderer configuration (xiaoyue model)
+# Rendering runs in a dedicated thread (§7.3.4), never on the asyncio event loop.
+# fallback_enabled: auto-switch to FallbackTextBubble on init failure or runtime crash.
+# Expressions are xiaoyue-specific parameter IDs; motions use xiaoyue's .motion3.json files.
+
+model_path: "live2d/xiaoyue/xiaoyue.model3.json"
+window_width: 400
+window_height: 600
+scale: 1.0
+fallback_enabled: true
+
+expressions:
+  # v4.5.0 §7.3.6: Expression name → space-separated ParamID:Value pairs
+  # xiaoyue custom parameter IDs (AJXXX format) from .exp3.json files
+  smile: "AJYYY:0.0 AJAX:0.0 AJXX:1.0 AJBXX:1.0 AJBAX:0.0 AJYGGYC:1.0"      # 星星眼 (star eyes)
+  sad: "AJYYY:1.0 AJAX:0.0 AJXX:0.0 AJZ1:1.0 AJYGGYC:1.0 AJZBYC:1.0"        # 晕晕眼 (dizzy eyes)
+  surprised: "AJYYY:0.0 AJAX:1.0 AJXX:0.0 AJBXX:0.0 AJBAX:1.0 AJYGGYC:1.0"  # 爱心眼 (heart eyes)
+  neutral: ""
+  blush: "AJLH:1.0"                                                          # 脸红
+  glasses: "AJYJ1:1.0"                                                       # 眼镜
+  elf_ears: "AJJLE:1.0"                                                      # 精灵耳
+  dark_face: "AJHL:1.0 AJYGGYC:1.0"                                         # 黑脸
+  bun_hair: "AJWZT:1.0"                                                      # 丸子头
+  lean_forward: "AJQQ:1.0"                                                    # 前倾
+
+motions:
+  idle: "live2d/xiaoyue/待机动画124.motion3.json"
+  face_lost: "live2d/xiaoyue/面捕丢失.motion3.json"

@@ -1,0 +1,14 @@
+# v4.4 — Audio pipeline configuration
+# VAD type: "ten_vad" (default) or "silero" (fallback).
+# VADFactory.create() auto-falls back to SileroVAD if TENVAD init fails.
+# onset_holdoff_ms: min speech duration enforced after onset detection (250ms).
+
+vad_type: "ten_vad"
+highpass_cutoff: 4000
+energy_rise_threshold_db: 15.0
+rise_window_ms: 8.0
+cooldown_ms: 200.0
+min_speech_ms: 250
+pre_roll_ms: 200
+buffer_duration_sec: 1.5
+onset_holdoff_ms: 250

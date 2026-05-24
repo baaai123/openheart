@@ -1,0 +1,56 @@
+# v4.4 — Memory configuration
+# Cold memory Level 2 summary: uses Qwen2.5-3B for lightweight summarization
+# every 3 days (~1s latency), replacing the v4.3.1 Louvain community detection approach.
+
+summary_model: "qwen_3b"
+
+hot:
+  # Redis-backed session memory
+  max_recent_scenes: 5
+
+cold:
+  # LanceDB long-term memory
+  sync_interval_hours: 24
+  retention_days: 365
+
+decay:
+  # Memory decay based on importance and recency
+  enabled: true
+  min_importance: 0.3
+
+# v5.x insight-memory-joint: Extended memory architecture
+
+tiers:
+  hot:
+    ttl_seconds: 30
+    storage: redis_stream
+    max_entries: 100
+  warm:
+    ttl_seconds: 86400
+    storage: redis_hash
+    max_entries: 1000
+  core:
+    ttl_seconds: -1
+    storage: lancedb
+    promotion_threshold: 0.7
+  cold:
+    ttl_seconds: -1
+    storage: lancedb
+    sync_interval_hours: 24
+  deep:
+    ttl_seconds: -1
+    storage: lancedb
+    min_pattern_count: 3
+
+prompt_memory:
+  t1_cache_size: 50
+  t3_store: lancedb
+  vpe_recalc_hours: 24
+  vpe_max_age_hours: 72
+
+retrieval_gate:
+  timeout_ms: 50
+  composite_weights:
+    recency: 0.4
+    relevance: 0.4
+    importance: 0.2

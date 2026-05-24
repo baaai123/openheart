@@ -1,0 +1,16 @@
+# v4.5.0 — Model placeholder paths
+# All paths relative to project root.
+# Actual model files will be downloaded by scripts/download_models.py.
+
+yolo_world: "models/yolo_world_nano"
+yolov11n: "models/yolov11n.pt"
+paddleocr: "models/paddleocr_onnx"
+clip_scene: "models/clip_vit_b32"
+sam3: "models/sam3"
+faster_whisper: "models/faster_whisper_large_v3"
+qwen_3b: "models/qwen2.5-3b"
+qwen_1.5b: "models/qwen2.5-1.5b-int8"
+qwen_0.5b: "models/qwen2.5-0.5b"
+cosyvoice: "models/cosyvoice-300m"
+cosyvoice_cpu: "models/cosyvoice_cpu.onnx"
+bge_small: "models/bge-small-zh-v1.5"

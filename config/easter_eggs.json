@@ -1,0 +1,38 @@
+{
+  "easter_eggs": {
+    "date_eggs": {
+      "birthday": {
+        "trigger": "user_birthday",
+        "message": "🎂 生日快乐！今天一定要开心哦～",
+        "animation": "birthday_celebration"
+      },
+      "spring_festival": {
+        "trigger": "spring_festival",
+        "message": "🧧 新年快乐！祝你万事如意～",
+        "animation": "festival_fireworks"
+      }
+    },
+    "achievement_eggs": {
+      "interaction_1000": {
+        "trigger": "interaction_count >= 1000",
+        "message": "🌟 我们已经聊了1000次啦！你是很重要的朋友呢～",
+        "animation": "sparkle"
+      },
+      "consecutive_30_days": {
+        "trigger": "consecutive_days >= 30",
+        "message": "💪 连续30天啦！你的坚持让我好感动～",
+        "animation": "heart_burst"
+      }
+    },
+    "hidden_eggs": {
+      "boring_chain": {
+        "trigger": "consecutive_boring_messages >= 3",
+        "message": "🕺 好无聊好无聊好无聊！来跳个魔性舞蹈吧！",
+        "animation": "funky_dance"
+      }
+    }
+  },
+  "rate_limit": {
+    "per_type_per_day": 1
+  }
+}

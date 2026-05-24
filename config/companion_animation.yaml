@@ -1,0 +1,69 @@
+# v4.5.0 §7.3.3: Companion animation mappings
+# Maps emotion categories to animation states: idle, wave, nod, bounce.
+# Each state defines: expression, motion, loop behaviour, duration, cooldown.
+#
+# Emotions are the reliable three: joy, sadness, neutral.
+# anger and surprise are placeholder — not used unless StructBERT enabled.
+
+listening:
+  expression: "smile"
+  motion: "nod"
+  loop: true
+  duration_ms: 1200
+  cooldown_ms: 3000
+
+idle_neutral:
+  expression: "neutral"
+  motion: "idle_tea"
+  loop: true
+  duration_ms: 5000
+  cooldown_ms: 8000
+
+idle_sadness:
+  expression: "sad"
+  motion: "tilt_head"
+  loop: true
+  duration_ms: 4000
+  cooldown_ms: 10000
+
+wave:
+  expression: "smile"
+  motion: "nod"
+  loop: false
+  duration_ms: 1500
+  cooldown_ms: 5000
+
+nod:
+  expression: "smile"
+  motion: "nod"
+  loop: false
+  duration_ms: 800
+  cooldown_ms: 2000
+
+bounce:
+  expression: "surprised"
+  motion: "tilt_head"
+  loop: false
+  duration_ms: 1000
+  cooldown_ms: 6000
+
+greeting:
+  expression: "smile"
+  motion: "nod"
+  loop: false
+  duration_ms: 2000
+  cooldown_ms: 15000
+
+emotion_map:
+  joy:
+    primary: "wave"
+    secondary: "bounce"
+    idle: "idle_neutral"
+  sadness:
+    primary: "nod"
+    secondary: "idle_sadness"
+    idle: "idle_sadness"
+  neutral:
+    primary: "nod"
+    secondary: "idle_neutral"
+    idle: "idle_neutral"

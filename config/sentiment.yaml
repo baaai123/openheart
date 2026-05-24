@@ -1,0 +1,7 @@
+# v4.4.1 — Sentiment analysis provider configuration
+# provider: "snownlp" for Chinese text (primary), "spacytextblob" for non-Chinese fallback.
+# Optional upgrade: "structbert" enables all 5 emotion categories (joy/sadness/neutral/anger/surprise).
+# Without structbert, anger and surprise are placeholder enums — downstream must not branch on them.
+
+provider: "snownlp"
+fallback: "spacytextblob"

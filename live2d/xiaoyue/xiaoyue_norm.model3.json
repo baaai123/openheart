@@ -1,0 +1,1 @@
+{"Version": 3, "Groups": [{"Target": "Parameter", "Name": "LipSync", "Ids": []}, {"Target": "Parameter", "Name": "EyeBlink", "Ids": []}], "model": "xiaoyue.moc3", "textures": ["xiaoyue.8192/texture_00.png"], "physics": "xiaoyue.physics3.json"}

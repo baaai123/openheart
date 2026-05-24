@@ -15,7 +15,10 @@ learning/
 纳西妲/
 胡桃/
 伊吹/
+combined/
+feibi/
 PaddleX/
+PaddleX-release-3.5/
 
 # Large downloads
 vllm*/
@@ -23,6 +26,8 @@ vlm_deps/
 weights/
 mobileclip*
 yoloe*.pt
+ultralytics-8.4.48/
+yoloe/
 
 # Python
 __pycache__/
@@ -53,6 +58,19 @@ openheart-backup*/
 实施方案.md
 项目宪法.md
 雪奈.json
+
+# Scratch
+.scratch/
+scratch/
+
+# Development artifacts
+=5.0
+dump.rdb
+libgl-dev*.deb
+*:Zone.Identifier
+
+# Node
+electron-l2d/node_modules/
 
 # Misc
 *.ts

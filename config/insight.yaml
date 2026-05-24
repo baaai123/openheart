@@ -1,0 +1,48 @@
+# v5.x insight-memory-joint: Visual learning configuration
+
+prompt_memory:
+  t1_cache_size: 200
+  max_recall_concepts: 200
+  vpe_recalc_hours: 24
+  vpe_max_age_hours: 72
+
+prompt_learner:
+  vlm_max_per_cycle: 3
+  vlm_queue_max: 20
+  vlm_timeout_seconds: 10
+  conf_threshold_low: 0.3
+  conf_threshold_high: 0.7
+  name_format: snake_case_english
+
+dual_yoloe:
+  small:
+    model: yoloe-v8s-seg-pf.pt
+    mode: pf
+    conf: 0.15
+    max_det: 500
+    vram_budget_gb: 0.3
+  large:
+    model: yoloe-v8s-seg.pt
+    default_mode: text_prompt
+    fallback_mode: pf
+    conf: 0.1
+    max_det: 500
+    vram_budget_gb: 0.7
+  total_vram_budget_gb: 1.5
+
+spatial_graph:
+  quadrant_threshold: 0.5
+  near_distance_px: 150
+  cluster_method: hierarchical
+  max_edges_per_frame: 100
+
+ocr:
+  engine: paddleocr
+  confidence_threshold: 0.6  # v5.x audit P2: raised from 0.3 to 0.6 for higher precision
+  dedup_edit_distance: 3
+
+reflection:
+  interval_seconds: 5.0
+  min_pattern_occurrences: 3
+  pattern_time_window_seconds: 300
+  max_insights_stored: 100

@@ -1,0 +1,12 @@
+# ⚠️ DEAD CODE — fast_path_matcher deprecated v5.0
+# v4.5.0 §5.2.1 — Fast path regex rules
+# Matched before reflex rule lookup. Confidence >= 0.9 triggers fast path (skip rule engine).
+# v4.4: adaptive field enables dynamic confidence decay based on success/failure ratio.
+# Confidence < 0.7 auto-demotes to normal path.
+
+- regex: "^(运行|执行|点一下|打开)"
+  confidence: 0.95
+  adaptive: true
+- regex: "^(下一个|上一页|确认|取消)$"
+  confidence: 0.92
+  adaptive: true
