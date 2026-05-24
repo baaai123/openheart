@@ -1,0 +1,118 @@
+# OpenHeart Docker Compose — Infrastructure Services
+# v4.5.0 §0.2: Redis≥7.2 (with Stream), LanceDB≥0.6
+# v4.5.0 §3.2.2: AOF persistence, appendfsync everysec, max 30s data loss
+# v4.5.0 §3.2.3: Redis stores structured data only (JSON/Hash), not graph queries
+
+services:
+  # ──────────────────────────────────────────────────────────────────
+  # Redis ≥7.2 — Hot Memory + State Bus (§3.2.1 – §3.2.3)
+  # Stores: Scene JSON, entity Hash, context List, sync_queue Stream,
+  #         moments, entity_graph, pending rules, health heartbeats
+  # AOF: appendfsync everysec → at most 30s data loss on crash (§1.6)
+  # ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: openheart-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: >
+      redis-server
+        --appendonly yes
+        --appendfsync everysec
+        --auto-aof-rewrite-percentage 100
+        --auto-aof-rewrite-min-size 64mb
+        --save ""
+        --maxmemory 512mb
+        --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - openheart-net
+
+  # ──────────────────────────────────────────────────────────────────
+  # LanceDB ≥0.6 — Cold Memory, vector storage (§3.3)
+  # LanceDB is an EMBEDDED database — it runs in-process as a Python
+  # library (pip install lancedb), NOT as a standalone service.
+  # This entry is a placeholder that provides the data volume for
+  # persistence. The application manages LanceDB lifecycle internally.
+  # ──────────────────────────────────────────────────────────────────
+  lancedb:
+    image: alpine:3.19
+    container_name: openheart-lancedb
+    command: |
+      sh -c '
+        echo "LanceDB is embedded — data volume mounted at /data/lancedb"
+        echo "Application manages LanceDB lifecycle in-process."
+        echo "Container exists only to provide persistent volume."
+        while true; do sleep 3600; done
+      '
+    restart: unless-stopped
+    volumes:
+      - lancedb-data:/data/lancedb
+    healthcheck:
+      test: ["CMD", "test", "-d", "/data/lancedb"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - openheart-net
+
+  # ──────────────────────────────────────────────────────────────────
+  # CosyVoice gRPC — TTS service placeholder (§7.4)
+  # Enables remote TTS synthesis via gRPC (primary), WebSocket (fallback).
+  # Uncomment and configure when CosyVoice-300M server is ready.
+  # ──────────────────────────────────────────────────────────────────
+  # cosyvoice:
+  #   image: cosyvoice/cosyvoice:latest
+  #   container_name: openheart-cosyvoice
+  #   restart: unless-stopped
+  #   ports:
+  #     - "50051:50051"      # gRPC
+  #     - "8765:8765"        # WebSocket fallback
+  #   volumes:
+  #     - cosyvoice-models:/models
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+  #   healthcheck:
+  #     test: ["CMD", "grpc_health_probe", "-addr=:50051"]
+  #     interval: 15s
+  #     timeout: 5s
+  #     retries: 3
+  #   profiles:
+  #     - tts
+  #   networks:
+  #     - openheart-net
+
+volumes:
+  redis-data:
+    name: openheart-redis-data
+    driver: local
+  lancedb-data:
+    name: openheart-lancedb-data
+    driver: local
+  # cosyvoice-models:
+  #   name: openheart-cosyvoice-models
+  #   driver: local
+
+networks:
+  openheart-net:
+    name: openheart-net
+    driver: bridge

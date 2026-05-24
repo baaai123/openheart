@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openheart"
+version = "0.1.0"
+description = "Multi-modal virtual companion system"
+requires-python = ">=3.11"
+dependencies = [
+    # Core scientific computing
+    "numpy>=1.24",
+    "scipy>=1.10",
+    
+    # Deep learning
+    "torch>=2.0",
+    "torchaudio>=2.0",
+    "transformers>=4.35",
+    "accelerate>=0.24",
+    "bitsandbytes>=0.41",
+    "sentence-transformers>=2.2",
+    
+    # Audio / Speech
+    "pywhispercpp>=1.2",
+    "silero-vad>=4.0",
+    "ten-vad>=0.1",
+    
+    # NLP
+    "spacy>=3.7",
+    "snownlp>=0.12",
+    "textblob>=0.17",
+    
+    # Computer vision
+    "opencv-python-headless>=4.8",
+    
+    # Data / Storage
+    "redis[hiredis]>=5.0",
+    "lancedb>=0.6",
+    "pyyaml>=6.0",
+    
+    # Networking / Async
+    "websockets>=12.0",
+    "aiohttp>=3.9",
+    
+    # Input / Control
+    "pynput>=1.7",
+    "pyautogui>=0.9",
+    
+    # ML / Graph
+    "scikit-learn>=1.3",
+    "networkx>=3.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "black>=24.0",
+    "ruff>=0.3",
+    "mypy>=1.8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "strict"
+pythonpath = ["."]

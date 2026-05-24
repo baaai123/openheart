@@ -1,0 +1,306 @@
+[
+  {
+    "rule_id": "cb5f1c65-acf9-5341-99a5-76921a8e2578",
+    "name": "greeting",
+    "priority": "CORE",
+    "status": "ACTIVE",
+    "condition": {
+      "trigger_type": "voice_command",
+      "pattern": "^(你好|嗨|嘿|喂|哈喽|hello|hi)\\b",
+      "context_constraints": []
+    },
+    "action": {
+      "type": "greeting",
+      "params": {
+        "reply_template": "你好呀～有什么事吗？"
+      },
+      "safety_level": "SAFE"
+    },
+    "template_id": null,
+    "template_slots": {},
+    "cluster_hint": null,
+    "metadata": {
+      "confidence": 1.0,
+      "success_count": 0,
+      "failure_count": 0,
+      "created_at": "2026-05-14T00:00:00Z",
+      "last_verified_at": "2026-05-14T00:00:00Z",
+      "source": "system_default",
+      "observation_remaining": 0
+    }
+  },
+  {
+    "rule_id": "67b003a8-62fb-5b0c-aa88-ba4d72cf38de",
+    "name": "self_intro",
+    "priority": "CORE",
+    "status": "ACTIVE",
+    "condition": {
+      "trigger_type": "voice_command",
+      "pattern": "^(你是谁|你叫什么|介绍一下自己)",
+      "context_constraints": []
+    },
+    "action": {
+      "type": "self_intro",
+      "params": {
+        "reply_template": "我是雪奈，你的聊天搭子妹妹～"
+      },
+      "safety_level": "SAFE"
+    },
+    "template_id": null,
+    "template_slots": {},
+    "cluster_hint": null,
+    "metadata": {
+      "confidence": 1.0,
+      "success_count": 0,
+      "failure_count": 0,
+      "created_at": "2026-05-14T00:00:00Z",
+      "last_verified_at": "2026-05-14T00:00:00Z",
+      "source": "system_default",
+      "observation_remaining": 0
+    }
+  },
+  {
+    "rule_id": "1136886d-e001-55ce-91fb-9c80b064229c",
+    "name": "capability",
+    "priority": "CORE",
+    "status": "ACTIVE",
+    "condition": {
+      "trigger_type": "voice_command",
+      "pattern": "^(你能做什么|你会什么|你有什么功能)",
+      "context_constraints": []
+    },
+    "action": {
+      "type": "capability",
+      "params": {
+        "reply_template": "我可以陪你聊天、看你屏幕、记住你说的话～"
+      },
+      "safety_level": "SAFE"
+    },
+    "template_id": null,
+    "template_slots": {},
+    "cluster_hint": null,
+    "metadata": {
+      "confidence": 1.0,
+      "success_count": 0,
+      "failure_count": 0,
+      "created_at": "2026-05-14T00:00:00Z",
+      "last_verified_at": "2026-05-14T00:00:00Z",
+      "source": "system_default",
+      "observation_remaining": 0
+    }
+  },
+  {
+    "rule_id": "adf3f1e4-d692-5292-b01a-df6e6d3863ab",
+    "name": "goodbye",
+    "priority": "CORE",
+    "status": "ACTIVE",
+    "condition": {
+      "trigger_type": "voice_command",
+      "pattern": "^(再见|拜拜|晚安|bye|88)",
+      "context_constraints": []
+    },
+    "action": {
+      "type": "goodbye",
+      "params": {
+        "reply_template": "拜拜～下次再聊！"
+      },
+      "safety_level": "SAFE"
+    },
+    "template_id": null,
+    "template_slots": {},
+    "cluster_hint": null,
+    "metadata": {
+      "confidence": 1.0,
+      "success_count": 0,
+      "failure_count": 0,
+      "created_at": "2026-05-14T00:00:00Z",
+      "last_verified_at": "2026-05-14T00:00:00Z",
+      "source": "system_default",
+      "observation_remaining": 0
+    }
+  },
+  {
+    "rule_id": "43bf4448-4e68-56a0-9363-80d05cac9482",
+    "name": "thanks",
+    "priority": "CORE",
+    "status": "ACTIVE",
+    "condition": {
+      "trigger_type": "voice_command",
+      "pattern": "^(谢谢|感谢|多谢|thanks|thank)",
+      "context_constraints": []
+    },
+    "action": {
+      "type": "thanks_response",
+      "params": {
+        "reply_template": "不客气～"
+      },
+      "safety_level": "SAFE"
+    },
+    "template_id": null,
+    "template_slots": {},
+    "cluster_hint": null,
+    "metadata": {
+      "confidence": 1.0,
+      "success_count": 0,
+      "failure_count": 0,
+      "created_at": "2026-05-14T00:00:00Z",
+      "last_verified_at": "2026-05-14T00:00:00Z",
+      "source": "system_default",
+      "observation_remaining": 0
+    }
+  },
+  {
+    "rule_id": "34e55f7e-4d81-5580-a198-94dd89ad9060",
+    "name": "sadness_comfort",
+    "priority": "CORE",
+    "status": "ACTIVE",
+    "condition": {
+      "trigger_type": "emotion_event",
+      "pattern": "sadness",
+      "context_constraints": [
+        {
+          "emotion_intensity": ">0.6"
+        }
+      ]
+    },
+    "action": {
+      "type": "comfort",
+      "params": {
+        "reply_template": "怎么了？有什么不开心的事可以跟我说～"
+      },
+      "safety_level": "SAFE"
+    },
+    "template_id": null,
+    "template_slots": {},
+    "cluster_hint": null,
+    "metadata": {
+      "confidence": 1.0,
+      "success_count": 0,
+      "failure_count": 0,
+      "created_at": "2026-05-14T00:00:00Z",
+      "last_verified_at": "2026-05-14T00:00:00Z",
+      "source": "system_default",
+      "observation_remaining": 0
+    }
+  },
+  {
+    "rule_id": "8ac67c53-2dcd-5d03-8b6a-7bf332f9bae5",
+    "name": "search_intent",
+    "priority": "CORE",
+    "status": "ACTIVE",
+    "condition": {
+      "trigger_type": "voice_command",
+      "pattern": "^(帮我搜|搜索|查一下|百度|google)",
+      "context_constraints": []
+    },
+    "action": {
+      "type": "search_intent",
+      "params": {
+        "confirm_prompt": "要帮你搜索吗？"
+      },
+      "safety_level": "NEEDS_CONFIRM"
+    },
+    "template_id": null,
+    "template_slots": {},
+    "cluster_hint": null,
+    "metadata": {
+      "confidence": 1.0,
+      "success_count": 0,
+      "failure_count": 0,
+      "created_at": "2026-05-14T00:00:00Z",
+      "last_verified_at": "2026-05-14T00:00:00Z",
+      "source": "system_default",
+      "observation_remaining": 0
+    }
+  },
+  {
+    "rule_id": "66616a14-698b-5df3-a642-94d319d09a96",
+    "name": "app_launch",
+    "priority": "CORE",
+    "status": "ACTIVE",
+    "condition": {
+      "trigger_type": "voice_command",
+      "pattern": "^(打开|启动|运行|launch)",
+      "context_constraints": []
+    },
+    "action": {
+      "type": "app_launch",
+      "params": {
+        "confirm_prompt": "要打开这个应用吗？"
+      },
+      "safety_level": "NEEDS_CONFIRM"
+    },
+    "template_id": null,
+    "template_slots": {},
+    "cluster_hint": null,
+    "metadata": {
+      "confidence": 1.0,
+      "success_count": 0,
+      "failure_count": 0,
+      "created_at": "2026-05-14T00:00:00Z",
+      "last_verified_at": "2026-05-14T00:00:00Z",
+      "source": "system_default",
+      "observation_remaining": 0
+    }
+  },
+  {
+    "rule_id": "de22a044-547d-5c80-88d0-b4427960e1d1",
+    "name": "screenshot",
+    "priority": "CORE",
+    "status": "ACTIVE",
+    "condition": {
+      "trigger_type": "voice_command",
+      "pattern": "^(截图|截屏|screenshot|screen)",
+      "context_constraints": []
+    },
+    "action": {
+      "type": "screenshot",
+      "params": {
+        "reply_template": "咔嚓！已经截图了～"
+      },
+      "safety_level": "SAFE"
+    },
+    "template_id": null,
+    "template_slots": {},
+    "cluster_hint": null,
+    "metadata": {
+      "confidence": 1.0,
+      "success_count": 0,
+      "failure_count": 0,
+      "created_at": "2026-05-14T00:00:00Z",
+      "last_verified_at": "2026-05-14T00:00:00Z",
+      "source": "system_default",
+      "observation_remaining": 0
+    }
+  },
+  {
+    "rule_id": "16712c83-cc8c-5823-bbd9-cd1647d6fadb",
+    "name": "silence",
+    "priority": "CORE",
+    "status": "ACTIVE",
+    "condition": {
+      "trigger_type": "voice_command",
+      "pattern": "^(闭嘴|安静|别说话|别吵|shut up|silence)",
+      "context_constraints": []
+    },
+    "action": {
+      "type": "silence_mode",
+      "params": {
+        "silence_duration_seconds": 60
+      },
+      "safety_level": "SAFE"
+    },
+    "template_id": null,
+    "template_slots": {},
+    "cluster_hint": null,
+    "metadata": {
+      "confidence": 1.0,
+      "success_count": 0,
+      "failure_count": 0,
+      "created_at": "2026-05-14T00:00:00Z",
+      "last_verified_at": "2026-05-14T00:00:00Z",
+      "source": "system_default",
+      "observation_remaining": 0
+    }
+  }
+]

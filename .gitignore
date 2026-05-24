@@ -1,0 +1,60 @@
+# Models and weights
+models/
+deps/
+*.pt
+*.bin
+*.safetensors
+*.onnx
+*.tar.gz
+*.zip
+
+# Data and training
+sft_data/
+sft_output/
+learning/
+纳西妲/
+胡桃/
+伊吹/
+PaddleX/
+
+# Large downloads
+vllm*/
+vlm_deps/
+weights/
+mobileclip*
+yoloe*.pt
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Environment
+.env
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# Archives
+archive/
+backup*/
+openheart-backup*/
+
+# Sisyphus (keep boulder.json)
+.sisyphus/plans/
+.sisyphus/evidence/
+.sisyphus/notepads/
+.sisyphus/drafts/
+
+# Chinese spec files
+多模态智能体架构工程规格书v4.5.0.md
+实施方案.md
+项目宪法.md
+雪奈.json
+
+# Misc
+*.ts
+data/
+logs/
