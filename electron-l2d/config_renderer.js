@@ -75,7 +75,6 @@
       systemPrompt: byId('persona-prompt').value || '',
       voiceEnabled: isToggleActive('tog-voice'),
       visualEnabled: isToggleActive('tog-visual'),
-      l2dEnabled: isToggleActive('tog-l2d'),
       voiceMode: voiceModeEl ? voiceModeEl.value : 'asr'
     };
   }
@@ -90,7 +89,6 @@
     byId('persona-prompt').value = cfg.systemPrompt || '';
     setToggle('tog-voice', cfg.voiceEnabled !== false);
     setToggle('tog-visual', cfg.visualEnabled !== false);
-    setToggle('tog-l2d', cfg.l2dEnabled !== false);
     var voiceModeEl = byId('voice-mode');
     if (voiceModeEl) {
       voiceModeEl.value = cfg.voiceMode === 'text' ? 'text' : 'asr';
@@ -135,8 +133,7 @@
     });
     await api.writePromptModules({ persona: config.systemPrompt });
     await api.writeUISettings({
-      visual_enabled: config.visualEnabled,
-      l2d_enabled: config.l2dEnabled
+      visual_enabled: config.visualEnabled
     });
   }
 
@@ -315,11 +312,6 @@
       this.classList.toggle('active');
       saveConfigToBackend();
     });
-    byId('tog-l2d').addEventListener('click', function () {
-      this.classList.toggle('active');
-      saveConfigToBackend();
-    });
-
     // Voice mode switch — save on change
     var voiceModeEl = byId('voice-mode');
     if (voiceModeEl) {

@@ -33,8 +33,7 @@ const CONFIG_DEFAULTS = {
   apiKey: '',
   systemPrompt: '',
   voiceEnabled: true,
-  visualEnabled: true,
-  l2dEnabled: true
+  visualEnabled: true
 };
 
 function loadConfigFile() {
