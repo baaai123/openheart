@@ -10,27 +10,31 @@ fi
 source /home/baaai/miniforge3/etc/profile.d/conda.sh
 conda activate cv311
 
-# Check API key FIRST - before loading any models
 cd /home/baaai/projects/openheart
+
+# Check API key FIRST
 echo "=== Checking DeepSeek API ==="
 python -c "
 import os, sys
 key = os.environ.get('DEEPSEEK_API_KEY', '')
 if not key:
-    print('ERROR: DEEPSEEK_API_KEY not set in .env file')
-    print('Set it in .env or the control panel')
+    print('ERROR: DEEPSEEK_API_KEY not set')
     sys.exit(1)
 from openai import OpenAI
 client = OpenAI(api_key=key, base_url='https://api.deepseek.com/v1')
-try:
-    r = client.chat.completions.create(model='deepseek-v4-flash', messages=[{'role':'user','content':'ping'}], max_tokens=1)
-    print('DEEPSEEK API OK')
-except Exception as e:
-    print(f'DEEPSEEK API FAILED: {e}')
-    print('Check your API key in .env or control panel')
-    sys.exit(1)
+r = client.chat.completions.create(model='deepseek-v4-flash', messages=[{'role':'user','content':'ping'}], max_tokens=1)
+print('DEEPSEEK API OK')
 "
-echo
 
-# Now start the full backend
+# Start REST API server in background
+echo "=== Starting REST API on port 8081 ==="
+python frontend/server.py &
+API_PID=$!
+sleep 1
+
+# Start main backend
+echo "=== Starting main backend ==="
 python scripts/demo_full.py "$@"
+
+# Cleanup
+kill $API_PID 2>/dev/null
