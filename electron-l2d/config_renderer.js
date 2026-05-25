@@ -450,6 +450,23 @@
     initChat();
     initStartButton();
     startStatusPolling();
+
+function pollStartupLog() {
+  var logEl = document.getElementById('startup-log');
+  if (!logEl) return;
+  fetch('http://localhost:8081/api/health')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      logEl.textContent = 'Backend: ONLINE\n' + (d.status || 'running');
+      logEl.style.color = '#4ec04e';
+    })
+    .catch(function() {
+      logEl.textContent = 'Backend: not running\nRun: wsl bash /home/baaai/projects/openheart/run_backend.sh';
+    });
+}
+setInterval(pollStartupLog, 3000);
+pollStartupLog();
+
   }
 
   if (document.readyState === 'loading') {
