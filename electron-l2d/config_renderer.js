@@ -92,6 +92,7 @@
     var voiceModeEl = byId('voice-mode');
     if (voiceModeEl) {
       voiceModeEl.value = cfg.voiceMode === 'text' ? 'text' : 'asr';
+      toggleChat(cfg.voiceMode === 'text');
     }
   }
 
@@ -312,12 +313,94 @@
       this.classList.toggle('active');
       saveConfigToBackend();
     });
-    // Voice mode switch — save on change
+    // Voice mode switch — save on change + toggle chat
     var voiceModeEl = byId('voice-mode');
     if (voiceModeEl) {
       voiceModeEl.addEventListener('change', function () {
+        toggleChat(this.value === 'text');
         saveConfigToBackend();
       });
+    }
+  }
+
+  // ---- Chat area ----
+
+  var _chatMessages = [];
+  var _chatMaxVisible = 50;
+
+  function toggleChat(show) {
+    var area = byId('chat-area');
+    if (!area) return;
+    area.classList.toggle('visible', show);
+  }
+
+  function appendChatMessage(role, text) {
+    var log = byId('chat-log');
+    if (!log) return;
+    _chatMessages.push({ role: role, text: text });
+    if (_chatMessages.length > _chatMaxVisible) {
+      _chatMessages.shift();
+    }
+    log.innerHTML = _chatMessages.map(function (m) {
+      var cls = m.role === 'user' ? 'chat-msg user' : m.role === 'error' ? 'chat-msg error' : 'chat-msg bot';
+      var label = m.role === 'user' ? 'You' : m.role === 'error' ? 'Error' : 'AI';
+      return '<div class="' + cls + '"><div class="sender">' + label + '</div>' + escapeHtml(m.text) + '</div>';
+    }).join('');
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  }
+
+  async function sendChatMessage() {
+    var input = byId('chat-input');
+    var sendBtn = byId('chat-send');
+    if (!input || !sendBtn) return;
+    var text = input.value.trim();
+    if (!text) return;
+
+    input.value = '';
+    input.disabled = true;
+    sendBtn.disabled = true;
+
+    appendChatMessage('user', text);
+
+    try {
+      var res = await apiFetch('/api/chat', {
+        method: 'POST',
+        body: JSON.stringify({ text: text })
+      });
+      var reply = (res && res.reply) || (res && res.text) || JSON.stringify(res);
+      appendChatMessage('bot', reply);
+    } catch (err) {
+      appendChatMessage('error', 'Request failed: ' + err.message);
+    } finally {
+      input.disabled = false;
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  }
+
+  function initChat() {
+    var input = byId('chat-input');
+    var sendBtn = byId('chat-send');
+    if (!input || !sendBtn) return;
+
+    sendBtn.addEventListener('click', sendChatMessage);
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        sendChatMessage();
+      }
+    });
+
+    // Initial visibility based on current voice mode
+    var voiceModeEl = byId('voice-mode');
+    if (voiceModeEl) {
+      toggleChat(voiceModeEl.value === 'text');
     }
   }
 
@@ -351,6 +434,7 @@
   function init() {
     loadSettings();
     initInputs();
+    initChat();
     initStartButton();
     startStatusPolling();
   }

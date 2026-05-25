@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import sys
 import uuid
@@ -118,6 +119,36 @@ async def handle_scan_file(request: web.Request) -> web.Response:
     return web.json_response(result)
 
 
+# ── Chat queue endpoint ─────────────────────────────────────────────
+
+CHAT_QUEUE = Path("/tmp/openheart_chat_queue.jsonl")
+
+
+async def handle_chat(request: web.Request) -> web.Response:
+    """POST /api/chat — queue user text for the backend to process.
+
+    Writes one JSON line per message to CHAT_QUEUE (JSONL format);
+    the backend (e.g. runtime_loop.py) tails this file and processes
+    each line as a chat request.
+    Returns {status: 'queued'} immediately.
+    """
+    body = await request.json()
+    text = body.get("text", "").strip()
+    if not text:
+        return web.json_response({"status": "error", "message": "text is required"}, status=400)
+
+    entry = {"text": text, "source": "frontend_ui"}
+    try:
+        with open(CHAT_QUEUE, "a") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        _log.warning("Failed to write to chat queue %s: %s", CHAT_QUEUE, exc)
+        return web.json_response({"status": "error", "message": str(exc)}, status=500)
+
+    _log.info("Chat queued (%d chars): %s …", len(text), text[:80])
+    return web.json_response({"status": "queued"})
+
+
 # ── Live2D WebSocket proxy ─────────────────────────────────────────
 
 class L2DProxy:
@@ -178,6 +209,7 @@ def make_app(l2d_port: int = 9876) -> web.Application:
     app.router.add_static("/live2d", LIVE2D_ROOT, name="live2d")
     app.router.add_post("/api/scan", handle_scan_text)
     app.router.add_post("/api/scan-file", handle_scan_file)
+    app.router.add_post("/api/chat", handle_chat)
 
     app.router.add_get("/ws/l2d", L2DProxy(l2d_port).handler)
 

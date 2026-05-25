@@ -72,7 +72,7 @@ logger = logging.getLogger("runtime_loop")
 
 # ---------------------------------------------------------------------------
 # UI settings loader — reads config/ui_settings.json
-# v4.5.0 §0.5 — controls visual_enabled, l2d_enabled, model overrides
+# v4.5.0 §0.5 — controls visual_enabled, model overrides
 # ---------------------------------------------------------------------------
 _UI_SETTINGS_PATH = Path(__file__).resolve().parent.parent / "config" / "ui_settings.json"
 
@@ -88,7 +88,7 @@ def _load_ui_settings() -> dict:
         return {}
 
 # ---------------------------------------------------------------------------
-# Null stubs for disabled features (visual_enabled=False / l2d_enabled=False)
+# Null stubs for disabled features (visual_enabled=False)
 # ---------------------------------------------------------------------------
 
 class _NullVisualOrchestrator:
@@ -106,20 +106,6 @@ class _NullVisualOrchestrator:
     async def start(self) -> None: pass
     async def stop(self) -> None: pass
 
-
-class _NullLive2DServer:
-    """Stub used when l2d_enabled=False in ui_settings.json. v4.5.0"""
-    _clients: list[Any] = [object()]  # non-empty → skip l2d wait loop
-    _llm_expr_set: bool = False
-
-    def __init__(self, port: int = 9876) -> None:
-        logger.info("Live2DServer disabled via ui_settings (l2d_enabled=False)")
-
-    async def start(self) -> None: pass
-    async def stop(self) -> None: pass
-    def send_subtitle(self, role: str = "", text: str = "") -> None: pass
-    def send_audio(self, chunk: Any = None) -> None: pass
-    def set_expression(self, name: str = "") -> None: pass
 
 # ---------------------------------------------------------------------------
 # v4.5.0 §0.5 — CUDA 12 compat for faster-whisper (CTranslate2 links libcublas.so.12)
@@ -201,8 +187,7 @@ async def run_voice_loop(
     # ── 0. Load ui_settings.json for feature toggles ──────────────
     _ui_settings = _load_ui_settings()
     _visual_enabled = _ui_settings.get("visual_enabled", True)
-    _l2d_enabled = _ui_settings.get("l2d_enabled", True)
-    logger.info("Config from ui_settings.json: visual_enabled=%s, l2d_enabled=%s", _visual_enabled, _l2d_enabled)
+    logger.info("Config from ui_settings.json: visual_enabled=%s", _visual_enabled)
 
     # v5.x ── VisualOrchestrator (replaces inline visual pipeline init) ──
     # Owns: VisualPipeline, WindowAttentionPipeline, FusionPipeline, SyncVisionQuery
@@ -374,15 +359,10 @@ async def run_voice_loop(
         _execution.set_transcript_overlay(_transcript)
     else:
         _transcript = None
-    if _l2d_enabled:
-        logger.info("Live2DServer: initializing (l2d_enabled=True)")
-        _l2d_server: Live2DServer | _NullLive2DServer = Live2DServer(port=9876)  # v5.x — Electron L2D WS bridge
-        _execution.set_l2d_server(_l2d_server)  # v5.x — inject WS for mouth start/finish signals
-        asyncio.ensure_future(_l2d_server.start())
-    else:
-        logger.info("Live2DServer: SKIPPED (l2d_enabled=False)")
-        _l2d_server = _NullLive2DServer()
-        _execution.set_l2d_server(None)
+    logger.info("Live2DServer: initializing (always enabled)")
+    _l2d_server = Live2DServer(port=9876)  # v5.x — Electron L2D WS bridge
+    _execution.set_l2d_server(_l2d_server)  # v5.x — inject WS for mouth start/finish signals
+    asyncio.ensure_future(_l2d_server.start())
 
     # ── 2.5. ActionScheduler — mouse actions (NOT in DecisionBridge) ──
     # v4.5.0 §7.2 — independent action dispatcher for runtime_loop
@@ -856,21 +836,18 @@ async def run_voice_loop(
     await asyncio.sleep(0)  # yield to let level_task run
 
     # v5.x — Wait for Electron L2D to connect before starting main loop
-    if _l2d_enabled:
-        _l2d_wait_start = time.monotonic()
-        _l2d_wait_printed = False
-        while not _l2d_server._clients and timeout > 0:
-            if not _l2d_wait_printed:
-                print("\n[L2D] Waiting for Electron avatar to connect...", flush=True)
-                _l2d_wait_printed = True
-            await asyncio.sleep(0.5)
-            if time.monotonic() - _l2d_wait_start > 30:
-                print("[L2D] No avatar connected — continuing without lip-sync", flush=True)
-                break
-        if _l2d_server._clients:
-            print("[L2D] Avatar connected — lip-sync active", flush=True)
-    else:
-        print("[L2D] Live2D disabled via config (l2d_enabled=False)", flush=True)
+    _l2d_wait_start = time.monotonic()
+    _l2d_wait_printed = False
+    while not _l2d_server._clients and timeout > 0:
+        if not _l2d_wait_printed:
+            print("\n[L2D] Waiting for Electron avatar to connect...", flush=True)
+            _l2d_wait_printed = True
+        await asyncio.sleep(0.5)
+        if time.monotonic() - _l2d_wait_start > 30:
+            print("[L2D] No avatar connected — continuing without lip-sync", flush=True)
+            break
+    if _l2d_server._clients:
+        print("[L2D] Avatar connected — lip-sync active", flush=True)
 
     # ── 6. Main loop ───────────────────────────────────────────────
     try:

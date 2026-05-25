@@ -308,13 +308,13 @@ ipcMain.handle('save-config', (_event, param) => {
         break;
       default:
         // Backend config keys (baseUrl, model, apiKey, systemPrompt,
-        // voiceEnabled, visualEnabled, l2dEnabled) are persisted to file
+        // voiceEnabled, visualEnabled) are persisted to file
         // but have no real-time Electron window effect — handled when backend starts
         break;
     }
   } else {
     // New: full config object from config_renderer.js saveConfigToBackend IPC fallback
-    const backendKeys = ['baseUrl', 'model', 'apiKey', 'systemPrompt', 'voiceEnabled', 'visualEnabled', 'l2dEnabled', 'voiceMode'];
+    const backendKeys = ['baseUrl', 'model', 'apiKey', 'systemPrompt', 'voiceEnabled', 'visualEnabled', 'voiceMode'];
     for (const k of backendKeys) {
       if (k in param) cfg[k] = param[k];
     }
@@ -423,7 +423,6 @@ ipcMain.handle('write-ui-settings', async (_event, params) => {
     if (err.code !== 'ENOENT') console.warn('[write-ui-settings] Failed to read:', err.message);
   }
   if (params.visual_enabled !== undefined) data.visual_enabled = params.visual_enabled;
-  if (params.l2d_enabled !== undefined) data.l2d_enabled = params.l2d_enabled;
   fs.writeFileSync(uiPath, JSON.stringify(data, null, 2) + '\n', 'utf-8');
   console.log('[write-ui-settings] Written to', uiPath);
   return { success: true };

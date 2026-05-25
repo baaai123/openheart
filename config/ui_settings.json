@@ -1,6 +1,5 @@
 {
   "voice_mode": "asr",
   "visual_enabled": true,
-  "l2d_enabled": true,
   "model": ""
 }

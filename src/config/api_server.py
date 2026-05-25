@@ -46,12 +46,11 @@ DEFAULT_CONFIG = {
     "systemPrompt": "",
     "voiceEnabled": True,
     "visualEnabled": True,
-    "l2dEnabled": True,
     "voiceMode": "asr",
 }
 
 ALLOWED_FIELDS = frozenset(DEFAULT_CONFIG.keys())
-BOOL_FIELDS = frozenset({"voiceEnabled", "visualEnabled", "l2dEnabled"})
+BOOL_FIELDS = frozenset({"voiceEnabled", "visualEnabled"})
 
 
 def _module_available(name: str) -> bool:

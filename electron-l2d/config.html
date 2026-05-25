@@ -276,6 +276,81 @@ textarea:focus {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+
+/* ── Chat area ── */
+.chat-area {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+}
+.chat-area.visible {
+  display: flex;
+}
+.chat-log {
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  min-height: 60px;
+  font-size: 12px;
+}
+.chat-msg {
+  padding: 4px 8px;
+  border-radius: 6px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+.chat-msg.user {
+  background: var(--primary-glow);
+  color: var(--text);
+  align-self: flex-end;
+}
+.chat-msg.bot {
+  background: var(--surface);
+  color: var(--text2);
+  align-self: flex-start;
+  border: 1px solid var(--border);
+}
+.chat-msg.error {
+  color: var(--danger);
+  font-style: italic;
+  align-self: flex-start;
+}
+.chat-msg .sender {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.chat-input-row {
+  display: flex;
+  gap: 6px;
+}
+.chat-input-row input {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface2);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 12px;
+  outline: none;
+  transition: border-color .2s;
+}
+.chat-input-row input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-glow);
+}
+.chat-input-row input:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
 </style>
 </head>
 <body>
@@ -324,6 +399,18 @@ textarea:focus {
     <div class="field">
       <label>Visual</label>
       <div class="toggle active" id="tog-visual"></div>
+    </div>
+  </div>
+
+  <!-- ── Chat ── -->
+  <div class="section" id="chat-section">
+    <div class="section-title">Chat</div>
+    <div class="chat-area" id="chat-area">
+      <div class="chat-log" id="chat-log"></div>
+      <div class="chat-input-row">
+        <input type="text" id="chat-input" placeholder="Type a message..." autocomplete="off">
+        <button class="btn primary" id="chat-send">Send</button>
+      </div>
     </div>
   </div>
 
