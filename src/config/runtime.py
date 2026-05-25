@@ -66,6 +66,8 @@ _ENV_REDIS_DB = "OPENMATE_REDIS_DB"
 _ENV_REDIS_PASSWORD = "OPENMATE_REDIS_PASSWORD"
 _ENV_REDIS_AOF = "OPENMATE_REDIS_AOF"
 _ENV_DEEPSEEK_API_KEY = "DEEPSEEK_API_KEY"
+_ENV_VLM_API_KEY = "VLM_API_KEY"
+_ENV_VLM_API_URL = "VLM_API_URL"
 
 # Redis defaults — spec §3.2.2
 _REDIS_HOST_DEFAULT = "localhost"
@@ -283,6 +285,13 @@ class RuntimeConfig:
     deepseek_temperature: float
     """Temperature for DeepSeek API generation (default: 0.8)."""
 
+    # ---- VLM cloud API configuration (MiniCPM / modelbest.cn) ----
+    vlm_api_key: str
+    """VLM API key, read from VLM_API_KEY env var at startup."""
+
+    vlm_api_url: str
+    """VLM API base URL (default: https://api.modelbest.cn/v1/chat/completions)."""
+
     # ---- Context configuration ----
     context_limit: int
     """Maximum token count for the assembled context window.
@@ -313,6 +322,8 @@ class RuntimeConfig:
 
         Non-OPENMATE_ env vars:
             DEEPSEEK_API_KEY  — DeepSeek API key (also read from config/endpoints.yaml)
+            VLM_API_KEY       — VLM cloud API key
+            VLM_API_URL       — VLM cloud API base URL
 
         VRAM tier auto-detection (two-tier):
             HIGH: ≥ 12 GB (all models, 4096 context)
@@ -378,6 +389,12 @@ class RuntimeConfig:
             # YAML not available or file not readable — use defaults, log warning
             logger.warning("Could not load %s: %s, using defaults", _ENDPOINTS_PATH, exc)
 
+        # ---- VLM cloud API ----
+        vlm_api_key: str = os.environ.get(_ENV_VLM_API_KEY, "")
+        vlm_api_url: str = os.environ.get(
+            _ENV_VLM_API_URL, "https://api.modelbest.cn/v1/chat/completions"
+        )
+
         # ---- Auto-detect VRAM ----
         vram_total_gb: float = _detect_vram_total_gb()
         vram_tier: VRAMTier = _resolve_vram_tier(vram_total_gb, force_low_vram)
@@ -416,13 +433,15 @@ class RuntimeConfig:
             deepseek_model=deepseek_model,
             deepseek_max_tokens=deepseek_max_tokens,
             deepseek_temperature=deepseek_temperature,
+            vlm_api_key=vlm_api_key,
+            vlm_api_url=vlm_api_url,
             context_limit=context_limit,
         )
 
         logger.info(
             "RuntimeConfig initialised: tier=%s, vram=%.1fGB, "
             + "perf=%s, transcript=%s, redis=%s:%d/%d, aof=%s, context=%d, "
-            + "deepseek=%s/%s",
+            + "deepseek=%s/%s, vlm=%s",
             vram_tier.value,
             vram_total_gb,
             performance_mode,
@@ -434,6 +453,7 @@ class RuntimeConfig:
             context_limit,
             deepseek_model,
             deepseek_base_url,
+            "configured" if vlm_api_key else "no-key",
         )
 
         return config

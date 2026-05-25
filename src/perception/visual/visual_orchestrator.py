@@ -154,7 +154,9 @@ class VisualOrchestrator:
             self._ocr_pipeline = OCRPipeline()
             # v5.x: VLM lazy-loaded on first PromptLearner use (saves ~4GB VRAM at startup)
             self._qwen_vl: Any = None
-            self._prompt_learner = PromptLearner(self._prompt_memory, vlm_lane=self._qwen_vl)
+            self._prompt_learner = PromptLearner(
+                self._prompt_memory, vlm_lane=self._qwen_vl, runtime_config=self._config
+            )
             self._log("[视觉v5] RegionProposer + OCR + PromptLearner ready (ConceptClassifier lazy)")
         except Exception as e:
             self._log(f"[视觉v5] Init degraded: {e}")

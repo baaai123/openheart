@@ -345,7 +345,7 @@ class ProactiveHeartbeat:
             response = ""
             async for token, is_done in self._decision_engine.stream_decide(
                 user_message=silent_turn,
-                conversation_messages=self._get_conversation_history(),  # v5.x: no limit — token budget handles truncation
+                conversation_messages=hist_copy,  # use local copy — token budget handles truncation
                 scene_summary=scene,
             ):
                 if not is_done:

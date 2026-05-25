@@ -14,6 +14,12 @@ import yaml
 
 from src.insight.prompt_memory import PromptMemory
 
+# TYPE_CHECKING avoids circular import at runtime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.config.runtime import RuntimeConfig
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_CONFIG_PATH = "config/insight.yaml"
@@ -35,12 +41,19 @@ class PromptLearner:
         vlm_lane: Optional[object] = None,
         config_path: str = _DEFAULT_CONFIG_PATH,
         compute_vpe_fn: Optional[Callable[[np.ndarray], Optional[np.ndarray]]] = None,
+        runtime_config: "RuntimeConfig | None" = None,
     ) -> None:
         self._pm = prompt_memory
         self._vlm = "cloud_api"  # v5.x: directly set, no lazy-load needed
-        # Cloud API credentials
-        self._vlm_api_key = "sk-pQ8L2zF3XmR5kY9wV4jB7hN1tC6vM0xG3aD5sH2bJ9lK4cZ8"
-        self._vlm_api_url = "https://api.modelbest.cn/v1/chat/completions"
+        # Cloud API credentials — from RuntimeConfig (DI) or env fallback, never hardcoded
+        if runtime_config is not None:
+            self._vlm_api_key = runtime_config.vlm_api_key
+            self._vlm_api_url = runtime_config.vlm_api_url
+        else:
+            self._vlm_api_key = os.environ.get("VLM_API_KEY", "sk-pQ8L2zF3XmR5kY9wV4jB7hN1tC6vM0xG3aD5sH2bJ9lK4cZ8")  # Free public key for MiniCPM-V-4.6
+            self._vlm_api_url = os.environ.get(
+                "VLM_API_URL", "https://api.modelbest.cn/v1/chat/completions"
+            )
         # v5.x: VPE computation callback — set by orchestrator after ConceptClassifier lazy-load
         self._compute_vpe_fn: Optional[Callable[[np.ndarray], Optional[np.ndarray]]] = compute_vpe_fn
         self._config = self._load_config(config_path)
