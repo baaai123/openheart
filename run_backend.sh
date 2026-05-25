@@ -11,6 +11,11 @@ for arg in "$@"; do
 done
 set -- "${_PASSTHROUGH_ARGS[@]}"
 
+# When silent, redirect all terminal output to log file
+if $SILENT; then
+    exec >> /tmp/openheart_backend.log 2>&1
+fi
+
 # Resolve project root: env var overrides, otherwise derive from script location
 PROJECT_ROOT="${PROJECT_ROOT:-$(cd "$(dirname "$0")" && pwd)}"
 

@@ -448,26 +448,16 @@ ipcMain.handle('start-backend', async () => {
   }
 
   return new Promise((resolve, reject) => {
-    // Spawn the Python backend server
+    // Spawn the Python backend server silently — no visible terminal window
     const serverScript = path.join(__dirname, 'run_server.py');
     backendProcess = spawn('python3', [serverScript], {
       cwd: __dirname,
-      stdio: ['pipe', 'pipe', 'pipe']
+      detached: true,
+      stdio: 'ignore'
     });
 
-    backendProcess.stdout.on('data', (data) => {
-      const output = data.toString();
-      console.log('[Backend]', output.trim());
-      // Watch for ready signal from backend output
-      if (output.includes('ready') || output.includes('listening') || output.includes('started')) {
-        sendConfigEvent('backend-progress', { text: 'Starting L2D renderer...', percent: 60 });
-        sendConfigEvent('backend-status', 'running');
-      }
-    });
-
-    backendProcess.stderr.on('data', (data) => {
-      console.warn('[Backend]', data.toString().trim());
-    });
+    // Unref so the child can outlive the parent if parent exits
+    backendProcess.unref();
 
     backendProcess.on('error', (err) => {
       console.error('[Backend] Failed to start:', err.message);
