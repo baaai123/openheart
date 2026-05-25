@@ -1133,6 +1133,7 @@ async def run_voice_loop(
             await _execution.drain_mic_echo()
             print()
             if not reply:
+                print(f"[LLM-REPLY] response={repr(reply[:100])}", flush=True)
                 logger.warning("Empty voice_response")
                 continue
 
