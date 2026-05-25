@@ -25,7 +25,7 @@ wsl python %WSL_PROJECT%\scripts\demo_full.py 2>&1
 echo.
 
 echo [3/3] Frontend...
-start "" "%WSL_PROJECT%\frontend\index.html"
+REM start "" "%WSL_PROJECT%\frontend\index.html"
 
 echo Done!
 pause
