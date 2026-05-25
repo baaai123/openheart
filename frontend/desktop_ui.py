@@ -16,6 +16,8 @@ from pathlib import Path
 # ── Constants ──────────────────────────────────────────────────────────
 ROOT     = Path(__file__).resolve().parent.parent
 ENV_FILE = ROOT / ".env"
+L2D_WIN_PATH = "D:\\electron-l2d"        # Windows path for electron-l2d
+L2D_WSL_PATH = "/mnt/d/electron-l2d"     # WSL mount of the same
 
 # Dark palette
 BG        = "#1e1e1e"
@@ -57,7 +59,15 @@ class DesktopUI:
         self.root.minsize(850, 550)
 
         self._proc: subprocess.Popen[str] | None = None
+        self._voice_proc: subprocess.Popen[str] | None = None
         self._running = False
+
+        # Step progress tracking for docker → L2D → voice launch flow
+        self._step_statuses: dict[str, bool | None] = {
+            "docker": None,
+            "l2d":    None,
+            "voice":  None,
+        }
 
         # API config variables
         self.baseurl_var = tk.StringVar()
@@ -175,7 +185,7 @@ class DesktopUI:
         stat_lf.pack(fill=tk.X, padx=4, pady=(0, 4))
 
         self._dots: dict[str, StatusDot] = {}
-        for col, name in enumerate(["Voice", "Visual", "L2D"]):
+        for col, name in enumerate(["Docker", "L2D", "Voice", "Visual"]):
             f = ttk.Frame(stat_lf)
             f.grid(row=0, column=col, padx=8, pady=4, sticky="w")
             dot = StatusDot(f)
@@ -218,13 +228,18 @@ class DesktopUI:
         self._start_btn.pack(side=tk.LEFT, padx=(0, 8))
 
         self._progress = ttk.Progressbar(
-            start_frame, mode="indeterminate", length=160
+            start_frame, mode="determinate", length=160, maximum=100
         )
         self._progress.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        # Status label
+        # Step status label
         self._status_var = tk.StringVar(value="Idle")
         ttk.Label(start_frame, textvariable=self._status_var,
+                  font=("Segoe UI", 8)).pack(side=tk.LEFT, padx=(8, 0))
+
+        # Step indicator label (e.g. "① Docker Compose  ✓ ② L2D  ...")
+        self._step_var = tk.StringVar(value="")
+        ttk.Label(start_frame, textvariable=self._step_var,
                   font=("Segoe UI", 8)).pack(side=tk.LEFT, padx=(8, 0))
 
         # ── Chat display ──
@@ -284,56 +299,161 @@ class DesktopUI:
             except tk.TclError:
                 pass
 
-    # ── Backend lifecycle ────────────────────────────────────────────
+    # ── Launch flow: Docker Compose → L2D ────────────────────────────
     def _start_backend(self):
         if self._running:
-            # Toggle off: stop the process
-            if self._proc:
-                self._proc.terminate()
-            return
-
-        sh_path = ROOT / "run_backend.sh"
-        if not sh_path.exists():
-            messagebox.showerror("Start Error",
-                f"run_backend.sh not found:\n{sh_path}")
             return
 
         self._running = True
-        self._start_btn.configure(text="STOP", style="TButton")
-        self._status_var.set("Starting...")
-        self._progress.start(15)
-        self._log("Starting backend...\n")
+        self._start_btn.configure(state=tk.DISABLED, text="Starting...")
+        self._status_var.set("Launching services...")
+        self._progress["value"] = 0
 
-        def _reader():
+        self._step_statuses = {"docker": None, "l2d": None, "voice": None}
+        for key, dot in self._dots.items():
+            if key in self._step_statuses:
+                dot.set(None)
+
+        self._log("=== Launch Flow: Docker Compose → L2D → Voice Pipeline ===\n")
+
+        def _launch_flow():
             try:
-                # Export env vars from UI fields so the subprocess inherits them
-                env = os.environ.copy()
-                env["DEEPSEEK_BASE_URL"] = self.baseurl_var.get()
-                env["DEEPSEEK_MODEL"]    = self.model_var.get()
-                env["DEEPSEEK_API_KEY"]  = self.apikey_var.get()
-
-                self._proc = subprocess.Popen(
-                    ["bash", str(sh_path)],
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, bufsize=1, env=env,
-                )
-                for line in self._proc.stdout or []:
-                    if line:
-                        self.root.after(0, self._log, line)
-                self._proc.wait()
-            except Exception as exc:
-                self.root.after(0, self._log, f"Error: {exc}\n")
+                self._step_docker_compose()
+                self._step_start_l2d()
+                self._step_start_voice()
             finally:
-                self.root.after(0, self._on_backend_stopped)
+                self.root.after(0, self._on_flow_finished)
 
-        threading.Thread(target=_reader, daemon=True).start()
+        threading.Thread(target=_launch_flow, daemon=True).start()
 
-    def _on_backend_stopped(self):
+    # ── Step 1: Docker Compose ───────────────────────────────────────
+    def _step_docker_compose(self):
+        def ui(msg, prog, ok):
+            self._step_statuses["docker"] = ok
+            self.root.after(0, lambda: (
+                self._status_var.set(msg),
+                self._progress.configure(value=prog),
+                self._step_var.set("① Docker " + ("✓" if ok else "✗") + "  ② L2D …  ③ Voice …"),
+                self._log(f"[Docker] {msg}\n"),
+                self._dots["docker"].set(ok),
+            ))
+
+        ui("Docker Compose: starting...", 10, None)
+        try:
+            result = subprocess.run(
+                ["docker", "compose", "--profile", "infra", "up", "-d"],
+                cwd=str(ROOT),
+                capture_output=True, text=True, timeout=120,
+            )
+            if result.returncode == 0:
+                ui("Docker Compose: online", 50, True)
+            else:
+                err = result.stderr.strip() or result.stdout.strip() or "exit code %d" % result.returncode
+                ui(f"Docker Compose: failed — {err}", 50, False)
+        except FileNotFoundError:
+            ui("Docker Compose: 'docker' not found in PATH", 50, False)
+        except subprocess.TimeoutExpired:
+            ui("Docker Compose: timed out (120s)", 50, False)
+        except Exception as exc:
+            ui(f"Docker Compose: error — {exc}", 50, False)
+
+    # ── Step 2: L2D from D:\electron-l2d ────────────────────────────
+    def _step_start_l2d(self):
+        def ui(msg, prog, ok):
+            self._step_statuses["l2d"] = ok
+            d = self._step_statuses.get("docker")
+            d_icon = "✓" if d is True else ("✗" if d is False else "…")
+            self.root.after(0, lambda: (
+                self._status_var.set(msg),
+                self._progress.configure(value=prog),
+                self._step_var.set(f"① Docker {d_icon}  ② L2D " + ("✓" if ok else "✗") + "  ③ Voice …"),
+                self._log(f"[L2D] {msg}\n"),
+                self._dots["l2d"].set(ok),
+            ))
+
+        ui("L2D: starting...", 60, None)
+        l2d_path = Path(L2D_WSL_PATH)
+        if not l2d_path.exists():
+            ui(f"L2D: path not found — {L2D_WIN_PATH}", 80, False)
+            return
+
+        try:
+            self._proc = subprocess.Popen(
+                ["cmd.exe", "/c", "start", "L2D", "/d", L2D_WIN_PATH,
+                 "cmd", "/k", "npm", "start"],
+                cwd=str(l2d_path),
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                text=True,
+            )
+            ui("L2D: launched", 100, True)
+        except Exception as exc:
+            ui(f"L2D: error — {exc}", 80, False)
+
+    # ── Step 3: Voice pipeline (demo_full.py) ────────────────────────
+    def _step_start_voice(self):
+        def ui(msg, prog, ok):
+            self._step_statuses["voice"] = ok
+            d = self._step_statuses.get("docker")
+            l = self._step_statuses.get("l2d")
+            d_icon = "✓" if d is True else ("✗" if d is False else "…")
+            l_icon = "✓" if l is True else ("✗" if l is False else "…")
+            self.root.after(0, lambda: (
+                self._status_var.set(msg),
+                self._progress.configure(value=prog),
+                self._step_var.set(f"① Docker {d_icon}  ② L2D {l_icon}  ③ Voice " + ("✓" if ok else "✗")),
+                self._log(f"[Voice] {msg}\n"),
+                self._dots["voice"].set(ok),
+            ))
+
+        demo_path = ROOT / "scripts" / "demo_full.py"
+        if not demo_path.exists():
+            ui(f"demo_full.py not found — cannot start voice pipeline", 90, False)
+            return
+
+        ui("Voice pipeline: starting...", 85, None)
+
+        # Export env from UI fields so the subprocess inherits them
+        env = os.environ.copy()
+        env["DEEPSEEK_BASE_URL"] = self.baseurl_var.get()
+        env["DEEPSEEK_MODEL"]    = self.model_var.get()
+        env["DEEPSEEK_API_KEY"]  = self.apikey_var.get()
+
+        try:
+            self._voice_proc = subprocess.Popen(
+                ["conda", "run", "-n", "cv311", "python",
+                 str(demo_path), "--mode", "voice"],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, bufsize=1, env=env,
+            )
+            ui("Voice pipeline: running", 100, True)
+
+            # Read and forward output in background
+            def _pipe_output():
+                vp = self._voice_proc
+                if not vp:
+                    return
+                try:
+                    for line in vp.stdout or []:
+                        if line:
+                            self.root.after(0, self._log, line)
+                    vp.wait()
+                except Exception:
+                    pass
+                finally:
+                    self.root.after(0, lambda: self._dots["voice"].set(False))
+
+            threading.Thread(target=_pipe_output, daemon=True).start()
+
+        except Exception as exc:
+            ui(f"Voice pipeline: error — {exc}", 90, False)
+
+    def _on_flow_finished(self):
         self._running = False
-        self._progress.stop()
-        self._start_btn.configure(text="START", style="Success.TButton")
-        self._status_var.set("Stopped")
-        self._log("Backend stopped.\n")
+        self._start_btn.configure(state=tk.NORMAL, text="START", style="Success.TButton")
+        all_ok = all(v is True for v in self._step_statuses.values())
+        self._status_var.set("All services online" if all_ok else "Launch incomplete")
+        self._log("=== Launch flow complete ===\n" if all_ok
+                   else "=== Launch flow finished with errors ===\n")
         self._proc = None
 
     def _log(self, msg: str):
@@ -345,12 +465,21 @@ class DesktopUI:
 
     # ── Cleanup ──────────────────────────────────────────────────────
     def _on_close(self):
+        # L2D was launched via cmd.exe /c start (detached window).
+        # self._proc (cmd.exe) should already have exited — safe-grace
         if self._proc and self._proc.poll() is None:
             self._proc.terminate()
             try:
                 self._proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 self._proc.kill()
+        # Voice pipeline needs active cleanup
+        if self._voice_proc and self._voice_proc.poll() is None:
+            self._voice_proc.terminate()
+            try:
+                self._voice_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self._voice_proc.kill()
         self.root.destroy()
 
     def run(self):
