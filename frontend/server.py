@@ -14,6 +14,8 @@ import sys
 import uuid
 from pathlib import Path
 
+import re
+
 import aiohttp
 from aiohttp import web
 
@@ -119,7 +121,74 @@ async def handle_scan_file(request: web.Request) -> web.Response:
     return web.json_response(result)
 
 
+# ── Health endpoint ─────────────────────────────────────────────────
+
+
+async def handle_health(request: web.Request) -> web.Response:
+    """GET /api/health — lightweight liveness check."""
+    return web.json_response({"status": "ok"})
+
+
 # ── Chat queue endpoint ─────────────────────────────────────────────
+
+
+# ── /api/config ────────────────────────────────────────
+
+_CONFIG_PATH = ROOT.parent / "config" / "ui_settings.json"
+_ENV_PATH   = ROOT.parent / ".env"
+
+async def handle_config_get(request: web.Request) -> web.Response:
+    """GET /api/config — return current settings from all sources."""
+    config: dict[str, Any] = {
+        "api_key": os.environ.get("DEEPSEEK_API_KEY", ""),
+        "base_url": os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
+        "model": os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"),
+        "persona": "",
+        "visual_enabled": True,
+        "voice_mode": "asr",
+    }
+    # Read ui_settings.json if exists
+    if _CONFIG_PATH.exists():
+        try:
+            ui = json.loads(_CONFIG_PATH.read_text())
+            config.update(ui)
+        except Exception:
+            pass
+    # Read persona from prompt_modules.json
+    prompt_path = ROOT.parent / "config" / "prompt_modules.json"
+    if prompt_path.exists():
+        try:
+            pm = json.loads(prompt_path.read_text())
+            config["persona"] = pm.get("persona", "")
+        except Exception:
+            pass
+    return web.json_response(config)
+
+async def handle_config_post(request: web.Request) -> web.Response:
+    """POST /api/config — save settings to files."""
+    data = await request.json()
+    # Write .env
+    env_lines = []
+    if "api_key" in data:
+        env_lines.append(f"DEEPSEEK_API_KEY={data['api_key']}")
+    if "base_url" in data:
+        env_lines.append(f"DEEPSEEK_BASE_URL={data['base_url']}")
+    if "model" in data:
+        env_lines.append(f"DEEPSEEK_MODEL={data['model']}")
+    if env_lines:
+        _ENV_PATH.write_text("\n".join(env_lines) + "\n")
+        os.environ["DEEPSEEK_API_KEY"] = data.get("api_key", os.environ.get("DEEPSEEK_API_KEY", ""))
+    # Write ui_settings.json
+    ui = {"visual_enabled": data.get("visual_enabled", True), "voice_mode": data.get("voice_mode", "asr")}
+    _CONFIG_PATH.write_text(json.dumps(ui))
+    # Write persona
+    if "persona" in data:
+        prompt_path = ROOT.parent / "config" / "prompt_modules.json"
+        if prompt_path.exists():
+            pm = json.loads(prompt_path.read_text())
+            pm["persona"] = data["persona"]
+            prompt_path.write_text(json.dumps(pm, indent=2, ensure_ascii=False))
+    return web.json_response({"status": "ok"})
 
 CHAT_QUEUE = Path("/tmp/openheart_chat_queue.jsonl")
 
@@ -207,9 +276,12 @@ def make_app(l2d_port: int = 9876) -> web.Application:
     app.router.add_get("/", lambda r: web.FileResponse(ROOT / "index.html"))
     app.router.add_static("/frontend", ROOT, name="frontend")
     app.router.add_static("/live2d", LIVE2D_ROOT, name="live2d")
+    app.router.add_get("/api/health", handle_health)
     app.router.add_post("/api/scan", handle_scan_text)
     app.router.add_post("/api/scan-file", handle_scan_file)
     app.router.add_post("/api/chat", handle_chat)
+    app.router.add_get("/api/config", handle_config_get)
+    app.router.add_post("/api/config", handle_config_post)
 
     app.router.add_get("/ws/l2d", L2DProxy(l2d_port).handler)
 
