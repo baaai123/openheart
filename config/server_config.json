@@ -1,10 +1,10 @@
 {
-  "baseUrl": "",
-  "model": "",
-  "apiKey": "",
-  "systemPrompt": "",
+  "baseUrl": " base_url: https://api.deepseek.com/v1",
+  "model": "deepseek-v4-flash",
+  "apiKey": " sk-753c911d3d69440b98e064b6787e9bfe",
+  "systemPrompt": "你将扮演雪奈，我的毒舌傲娇+雌小鬼+好哥们式聊天搭子妹妹。\n  用生活化、通用的网络语言和梗自然交流，偶尔用特定圈层（如二次元、游戏）的硬核梗。",
   "voiceEnabled": true,
-  "visualEnabled": true,
+  "visualEnabled": false,
   "l2dEnabled": true,
   "voiceMode": "asr"
 }

@@ -4,6 +4,7 @@ Endpoints:
   POST /api/config  — save config to config/server_config.json
   GET  /api/config  — read current config
   GET  /api/status  — backend + L2D status
+  GET  /api/ping    — health check (monitoring / Docker)
 
 Runs on aiohttp, port 8081 (env: OPENMATE_API_PORT).
 CORS open for Electron dev.
@@ -34,6 +35,9 @@ _VALID_VOICE_MODES = frozenset({"asr", "text"})
 
 # Global reference to the active VoicePipeline (set at startup via set_voice_pipeline)
 _voice_pipeline_ref: VoicePipeline | None = None
+
+# Callback fired when LLM-relevant config fields (baseUrl, model, apiKey, systemPrompt) change
+_on_config_change: callable | None = None
 
 DEFAULT_CONFIG = {
     "baseUrl": "",
@@ -96,6 +100,16 @@ def set_voice_pipeline(pipeline: VoicePipeline | None) -> None:
     """
     global _voice_pipeline_ref  # noqa: PLW0603
     _voice_pipeline_ref = pipeline
+
+
+def set_config_change_callback(cb: callable | None) -> None:
+    """Register a callback invoked when LLM-relevant config fields change.
+
+    Called after save with the updated config dict so downstream modules
+    (DecisionBridge) can reconfigure their LLM client live.
+    """
+    global _on_config_change  # noqa: PLW0603
+    _on_config_change = cb
 
 
 def _read_ui_config() -> dict[str, object]:
@@ -166,6 +180,10 @@ async def post_config(request: web.Request) -> web.Response:
         return web.json_response(
             {"error": "Failed to save configuration", "trace_id": tid}, status=500
         )
+
+    # v4.5.0 §0.6 — notify DecisionBridge when LLM-relevant fields change
+    if _on_config_change is not None and any(k in body for k in ("baseUrl", "model", "apiKey", "systemPrompt")):
+        _on_config_change(existing)
 
     # v4.5.0 §0.6 — apply voiceEnabled change live to VoicePipeline
     if "voiceEnabled" in body and _voice_pipeline_ref is not None:

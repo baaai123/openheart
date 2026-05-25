@@ -106,6 +106,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('backend-progress', (_event, data) => callback(data));
   },
 
+  // ---- Real config file writers (v4.5.0 §13) ----
+  writeEnv: (params) => ipcRenderer.invoke('write-env', params),
+  writePromptModules: (params) => ipcRenderer.invoke('write-prompt-modules', params),
+  writeUISettings: (params) => ipcRenderer.invoke('write-ui-settings', params),
+
   /**
    * Show an informational message box in the config window.
    * Returns the index of the clicked button.

@@ -124,6 +124,22 @@
 
   var _saveInFlight = false;
 
+  // ---- Real config file writers (v4.5.0 §13) ----
+
+  async function writeConfigFilesViaIPC(config) {
+    if (!api) return;
+    await api.writeEnv({
+      DEEPSEEK_API_KEY: config.apiKey,
+      DEEPSEEK_BASE_URL: config.baseUrl,
+      DEEPSEEK_MODEL: config.model
+    });
+    await api.writePromptModules({ persona: config.systemPrompt });
+    await api.writeUISettings({
+      visual_enabled: config.visualEnabled,
+      l2d_enabled: config.l2dEnabled
+    });
+  }
+
   async function saveConfigToBackend() {
     if (_saveInFlight) return; // prevent concurrent saves
     _saveInFlight = true;
@@ -131,7 +147,7 @@
     try {
       // (1) Try POST to API first
       await apiFetch('/api/config', { method: 'POST', body: JSON.stringify(config) });
-      // Also save to localStorage so page load works when backend is down
+      await writeConfigFilesViaIPC(config);
       saveToLocalStorage(config);
       toast('Saved to backend');
     } catch (_apiErr) {
@@ -140,14 +156,15 @@
       try {
         if (api && api.saveConfig) {
           await api.saveConfig(config);
+          await writeConfigFilesViaIPC(config);
           saveToLocalStorage(config);
           toast('Saved locally (backend not running)');
         } else {
           throw new Error('electronAPI.saveConfig not available');
         }
       } catch (_ipcErr) {
-        // IPC also failed — last resort: localStorage only
         console.warn('[config] IPC saveConfig failed, using localStorage:', _ipcErr);
+        try { await writeConfigFilesViaIPC(config); } catch (_) {}
         saveToLocalStorage(config);
         toast('Saved locally (backend not running)');
       }

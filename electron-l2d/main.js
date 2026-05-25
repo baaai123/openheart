@@ -368,6 +368,68 @@ ipcMain.handle('open-terminal', async (_event, cmd) => {
   }
 });
 
+// ---- Real config file writers (v4.5.0 §13) ----
+
+ipcMain.handle('write-env', async (_event, params) => {
+  // params: { DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL }
+  // Read-modify-write .env file (KEY=VALUE format, one per line)
+  const envPath = path.join(__dirname, '..', '.env');
+  let content = '';
+  try {
+    content = fs.readFileSync(envPath, 'utf-8');
+  } catch (err) {
+    // File doesn't exist yet — start with empty content; safe because we'll write a fresh one
+    if (err.code !== 'ENOENT') console.warn('[write-env] Failed to read .env:', err.message);
+  }
+  const lines = content ? content.split('\n') : [];
+  const updateLine = (prefix, value) => {
+    if (!value && value !== '') return; // skip undefined/null — leave existing value
+    const idx = lines.findIndex(l => l.startsWith(prefix + '='));
+    const newLine = prefix + '=' + value;
+    if (idx >= 0) lines[idx] = newLine;
+    else lines.push(newLine);
+  };
+  updateLine('DEEPSEEK_API_KEY', params.DEEPSEEK_API_KEY);
+  updateLine('DEEPSEEK_BASE_URL', params.DEEPSEEK_BASE_URL);
+  updateLine('DEEPSEEK_MODEL', params.DEEPSEEK_MODEL);
+  const filtered = lines.filter(l => l.trim() !== '');
+  fs.writeFileSync(envPath, filtered.join('\n') + '\n', 'utf-8');
+  console.log('[write-env] Written to', envPath);
+  return { success: true };
+});
+
+ipcMain.handle('write-prompt-modules', async (_event, params) => {
+  const pmPath = path.join(__dirname, '..', 'config', 'prompt_modules.json');
+  let data = {};
+  try {
+    data = JSON.parse(fs.readFileSync(pmPath, 'utf-8'));
+  } catch (err) {
+    // File doesn't exist or is invalid JSON — start fresh; safe because we write valid JSON back
+    if (err.code !== 'ENOENT') console.warn('[write-prompt-modules] Failed to read:', err.message);
+  }
+  if (params.persona !== undefined) {
+    data.persona = params.persona;
+  }
+  fs.writeFileSync(pmPath, JSON.stringify(data, null, 2) + '\n', 'utf-8');
+  console.log('[write-prompt-modules] Written to', pmPath);
+  return { success: true };
+});
+
+ipcMain.handle('write-ui-settings', async (_event, params) => {
+  const uiPath = path.join(__dirname, '..', 'config', 'ui_settings.json');
+  let data = {};
+  try {
+    data = JSON.parse(fs.readFileSync(uiPath, 'utf-8'));
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.warn('[write-ui-settings] Failed to read:', err.message);
+  }
+  if (params.visual_enabled !== undefined) data.visual_enabled = params.visual_enabled;
+  if (params.l2d_enabled !== undefined) data.l2d_enabled = params.l2d_enabled;
+  fs.writeFileSync(uiPath, JSON.stringify(data, null, 2) + '\n', 'utf-8');
+  console.log('[write-ui-settings] Written to', uiPath);
+  return { success: true };
+});
+
 // ---- Backend control (v4.5.0 §13) ----
 
 ipcMain.handle('start-backend', async () => {

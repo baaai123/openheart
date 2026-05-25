@@ -462,20 +462,35 @@ class DecisionBridge:
             return None
 
     def _init_decision_engine(self) -> Any:
-        """Initialize DeepSeekDecision cloud API client (v4.5.0 §5.4)."""
+        """Initialize DeepSeekDecision cloud API client (v4.5.0 §5.4).
+
+        Reads LLM config from config/server_config.json first (set by config panel),
+        falling back to hardcoded defaults in the config object.
+        """
         try:
             # Lazy import — avoid circular deps and keep top-level imports lean
             from src.decision.deepseek_client import DeepSeekDecision  # noqa: E402
 
-            api_key = self.config.deepseek_api_key
+            # Read server_config.json for overrides from config panel
+            srv_cfg: dict = {}
+            try:
+                from pathlib import Path
+                srv_path = Path(__file__).resolve().parent.parent.parent / "config" / "server_config.json"
+                srv_cfg = json.loads(srv_path.read_text())
+            except Exception:
+                pass
+
+            api_key = srv_cfg.get("apiKey") or self.config.deepseek_api_key
             engine = DeepSeekDecision(
                 api_key=api_key,
-                base_url="https://api.deepseek.com/v1",
-                model="deepseek-v4-flash",
+                base_url=srv_cfg.get("baseUrl") or self.config.deepseek_base_url or "https://api.deepseek.com/v1",
+                model=srv_cfg.get("model") or self.config.deepseek_model or "deepseek-v4-flash",
+                system_prompt=srv_cfg.get("systemPrompt") or None,
             )
             logger.info(
-                "Decision engine ready (key=%s).",
+                "Decision engine ready (key=%s, model=%s).",
                 "configured" if api_key else "MISSING",
+                engine.model,
             )
             return engine
         except Exception as exc:
@@ -485,6 +500,34 @@ class DecisionBridge:
                 exc,
             )
             return None
+
+    def apply_server_config(self) -> None:
+        """Reload LLM configuration from config/server_config.json live.
+
+        Called by the API server callback when the config panel saves changes
+        to LLM-relevant fields (baseUrl, model, apiKey, systemPrompt).
+        """
+        from pathlib import Path
+        import json
+
+        if not self.decision_engine:
+            return
+        srv_path = Path(__file__).resolve().parent.parent.parent / "config" / "server_config.json"
+        try:
+            cfg = json.loads(srv_path.read_text())
+        except Exception:
+            logger.warning("apply_server_config: failed to read server_config.json")
+            return
+
+        if cfg.get("baseUrl"):
+            self.decision_engine.base_url = cfg["baseUrl"]
+        if cfg.get("model"):
+            self.decision_engine.model = cfg["model"]
+        if cfg.get("apiKey"):
+            self.decision_engine.api_key = cfg["apiKey"]
+        if cfg.get("systemPrompt"):
+            self.decision_engine.system_prompt = cfg["systemPrompt"]
+        logger.info("Decision engine reconfigured (model=%s)", self.decision_engine.model)
 
     def _init_baseline_personality(self) -> BaselinePersonality | None:
         """Load immutable personality baseline (v4.5.0 §4.6 singleton)."""

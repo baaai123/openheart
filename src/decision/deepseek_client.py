@@ -20,6 +20,42 @@ import json
 from pathlib import Path
 
 _PROMPT_CONFIG_PATH = Path(__file__).parents[2] / "config" / "prompt_modules.json"
+_UI_SETTINGS_PATH = Path(__file__).parents[2] / "config" / "ui_settings.json"
+_ENDPOINTS_PATH = Path(__file__).parents[2] / "config" / "endpoints.yaml"
+
+
+def _resolve_model_from_config() -> str | None:
+    """Read model name from config/ui_settings.json → fallback config/endpoints.yaml.
+
+    Returns the model string or None if neither config has a value.
+    """
+    # Try ui_settings.json first
+    try:
+        with open(_UI_SETTINGS_PATH, "r", encoding="utf-8") as f:
+            ui: dict = json.load(f)
+        model = ui.get("model", "") or ""
+        if model:
+            logger.info("model resolved from ui_settings.json: %s", model)
+            return model
+    except Exception as exc:
+        logger.debug("ui_settings.json not readable for model query: %s", exc)
+
+    # Fallback to endpoints.yaml
+    try:
+        import yaml
+        with open(_ENDPOINTS_PATH, "r", encoding="utf-8") as f:
+            ep: dict = yaml.safe_load(f) or {}
+        model = (ep.get("deepseek", {}) or {}).get("model", "") or ""
+        if model:
+            logger.info("model resolved from endpoints.yaml: %s", model)
+            return model
+    except ImportError:
+        logger.debug("PyYAML not available — skipping endpoints.yaml model lookup")
+    except Exception as exc:
+        logger.debug("endpoints.yaml not readable for model query: %s", exc)
+
+    logger.info("model not configured in ui_settings.json or endpoints.yaml — using default")
+    return None
 
 def _load_prompt_modules() -> dict:
     try:
@@ -85,10 +121,19 @@ class DeepSeekDecision:
         """
         self.api_key: str = api_key
         self.base_url: str = base_url
+        # Resolve model: explicit arg > ui_settings.json > endpoints.yaml > hardcoded default
+        if model == "deepseek-chat":
+            resolved = _resolve_model_from_config()
+            if resolved:
+                model = resolved
         self.model: str = model
         self.system_prompt: str = system_prompt or DEFAULT_SYSTEM_PROMPT
         self._client: Any = None  # lazy-import + init in decide()
         self._stream_lock = asyncio.Lock()
+        logger.info(
+            "DeepSeekDecision initialized (model=%s, base_url=%s)",
+            self.model, self.base_url,
+        )
 
     # ------------------------------------------------------------------
     # Public API
