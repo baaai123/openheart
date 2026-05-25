@@ -70,16 +70,16 @@ client = OpenAI(api_key=key, base_url='https://api.deepseek.com/v1')
 r = client.chat.completions.create(model='deepseek-v4-flash', messages=[{'role':'user','content':'ping'}], max_tokens=1)
 " > /dev/null 2>&1
     else
-        python -c "
+        python << 'PY_CHECK_API'
 import os,sys
 key = os.environ.get('DEEPSEEK_API_KEY','').strip()
-print(f'Key length: {len(key)}, starts with sk-: {key.startswith("sk-")}')
+print(f"Key length: {len(key)}, starts with sk-: {key.startswith('sk-')}")
 if not key: sys.exit(1)
 from openai import OpenAI
 client = OpenAI(api_key=key, base_url='https://api.deepseek.com/v1')
 r = client.chat.completions.create(model='deepseek-v4-flash', messages=[{'role':'user','content':'ping'}], max_tokens=1)
 print('DEEPSEEK API OK')
-"
+PY_CHECK_API
     fi
 fi
 
