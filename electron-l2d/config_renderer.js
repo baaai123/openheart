@@ -258,6 +258,24 @@
     }
   }
 
+  function updateAIBackendStatus(state) {
+    var textEl = byId('status-ai-backend-text');
+    if (!textEl) return;
+    switch (state) {
+      case 'running':
+        setDotColor('status-ai-backend-dot', 'green');
+        textEl.textContent = 'Running';
+        break;
+      case 'starting':
+        setDotColor('status-ai-backend-dot', 'yellow');
+        textEl.textContent = 'Starting...';
+        break;
+      default:
+        setDotColor('status-ai-backend-dot', 'red');
+        textEl.textContent = 'Offline';
+    }
+  }
+
   // ---- Poll GET /api/status every 3s ----
 
   var _statusPollTimer = null;
@@ -266,7 +284,7 @@
     try {
       var status = await apiFetch('/api/status');
 
-      // Backend status — accept 'backend' or 'status' field
+      // Backend (L2D WebSocket) status — accept 'backend' or 'status' field
       var backendState = status.backend || status.status || 'offline';
       updateBackendStatus(backendState);
 
@@ -279,6 +297,18 @@
       // Backend unreachable → both offline
       updateBackendStatus('offline');
       updateL2DStatus('offline');
+    }
+
+    // Poll AI Backend REST API separately on port 8081
+    try {
+      var aiRes = await fetch('http://localhost:8081/api/status');
+      if (aiRes.ok) {
+        updateAIBackendStatus('running');
+      } else {
+        updateAIBackendStatus('offline');
+      }
+    } catch (err) {
+      updateAIBackendStatus('offline');
     }
   }
 
@@ -418,12 +448,12 @@
 
       // 2. Save to local persistence (Electron userData + localStorage)
       btn.textContent = '⏳ Saving config...';
-      updateProgress('Saving config...', 25);
+      updateProgress('Writing config...', 25);
       await saveConfigToBackend();
 
       // 3. Write config files to WSL so the backend can read .env and config files
       btn.textContent = '⏳ Writing WSL config...';
-      updateProgress('Writing WSL config...', 50);
+      updateProgress('Starting backend shell...', 50);
       try {
         await writeConfigFilesViaIPC(config);
       } catch (err) {
@@ -431,18 +461,38 @@
         toast('Warning: WSL config write failed');
       }
 
-      // 4. Start backend silently (no visible terminal window)
+      // 4. Start backend via IPC (main.js launches run_server.py + run_backend.sh)
       btn.textContent = '⏳ Starting backend...';
-      updateProgress('Starting backend...', 75);
+      updateProgress('Launching AI backend...', 60);
       if (api.startBackend) {
         api.startBackend();
         toast('Starting backend...');
       } else {
         toast('Backend API not available');
       }
-      btn.disabled = false;
-      btn.textContent = '▶ START L2D';
-      updateProgress('Ready', 100);
+
+      // After 3s, show the Terminal button + advance progress
+      // Button stays disabled until backend fully starts (IPC event will re-enable)
+      setTimeout(function () {
+        updateProgress('Waiting for API...', 80);
+        var showTermBtn = byId('btn-show-terminal');
+        if (showTermBtn) showTermBtn.style.display = 'block';
+        // Re-enable button after backend startup sequence
+        btn.disabled = false;
+        btn.textContent = '▶ START ALL';
+      }, 3000);
+    });
+  }
+
+  // ---- Show Terminal button ----
+
+  function initShowTerminalButton() {
+    byId('btn-show-terminal').addEventListener('click', function () {
+      if (api.openTerminal) {
+        api.openTerminal('wsl -d Ubuntu -- bash -i /home/baaai/projects/openheart/run_backend.sh');
+      } else {
+        toast('Terminal API not available');
+      }
     });
   }
 
@@ -453,6 +503,7 @@
     initInputs();
     initChat();
     initStartButton();
+    initShowTerminalButton();
     startStatusPolling();
 
   // ---- Startup log ----

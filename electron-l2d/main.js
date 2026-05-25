@@ -439,7 +439,7 @@ ipcMain.handle('write-ui-settings', async (_event, params) => {
 ipcMain.handle('start-backend', async () => {
   console.log('[Config] Start backend requested');
   sendConfigEvent('backend-status', 'starting');
-  sendConfigEvent('backend-progress', { text: 'Starting backend server...', percent: 30 });
+  sendConfigEvent('backend-progress', { text: 'Launching AI backend...', percent: 60 });
 
   // If a backend process is already running, kill it first
   if (backendProcess) {
@@ -478,12 +478,42 @@ ipcMain.handle('start-backend', async () => {
       backendProcess = null;
     });
 
+    // Also launch run_backend.sh in a visible terminal (platform-aware)
+    // v4.5.0 §13: This starts the full AI backend (ASR, TTS, LLM, memory)
+    const { exec } = require('child_process');
+    const projectRoot = path.resolve(__dirname, '..');
+    const backEndScript = path.join(projectRoot, 'run_backend.sh');
+    const platform = process.platform;
+
+    if (platform === 'win32') {
+      // Windows: launch run_backend.sh directly in WSL via Windows Terminal
+      const wslCmd = 'wsl -d Ubuntu -- bash -i /home/baaai/projects/openheart/run_backend.sh --no-api-check';
+      exec(`start "OpenHeart Backend" ${wslCmd}`, (err) => {
+        if (err) console.warn('[Backend] Failed to open WSL terminal:', err.message);
+      });
+    } else if (platform === 'linux') {
+      // Linux: launch in x-terminal-emulator
+      const termCmd = `bash -c "cd ${projectRoot} && bash ${backEndScript} --no-api-check; exec bash"`;
+      exec(`x-terminal-emulator -e ${termCmd}`, (err) => {
+        if (err) console.warn('[Backend] Failed to open x-terminal-emulator:', err.message);
+      });
+    } else if (platform === 'darwin') {
+      // macOS: launch in Terminal.app
+      const termCmd = `cd ${projectRoot} && bash ${backEndScript} --no-api-check`;
+      exec(`open -a Terminal.app "${termCmd}"`, (err) => {
+        if (err) console.warn('[Backend] Failed to open Terminal.app:', err.message);
+      });
+    }
+
+    // Send progress update after launching both processes
+    sendConfigEvent('backend-progress', { text: 'Waiting for API...', percent: 80 });
+
     // Give backend a moment to start, then start L2D connection
     setTimeout(() => {
       connectWebSocket();
       startHealthCheck();
       sendConfigEvent('l2d-status', 'running');
-      sendConfigEvent('backend-progress', { text: 'Running', percent: 100 });
+      sendConfigEvent('backend-progress', { text: 'All ready', percent: 100 });
       resolve({ success: true });
     }, 3000);
   });

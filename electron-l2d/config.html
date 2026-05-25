@@ -418,7 +418,12 @@ textarea:focus {
   <div class="section">
     <div class="section-title">Status</div>
     <div class="status-row">
-      <span class="status-label">Backend</span>
+      <span class="status-label">AI Backend</span>
+      <span class="status-dot red" id="status-ai-backend-dot"></span>
+      <span class="status-text" id="status-ai-backend-text">Offline</span>
+    </div>
+    <div class="status-row">
+      <span class="status-label">L2D Server</span>
       <span class="status-dot red" id="status-backend-dot"></span>
       <span class="status-text" id="status-backend-text">Offline</span>
     </div>
@@ -430,7 +435,7 @@ textarea:focus {
   </div>
 
   <!-- ── START BACKEND ── -->
-  <button class="btn primary start-btn" id="btn-start">▶ START L2D</button>
+  <button class="btn primary start-btn" id="btn-start">▶ START ALL</button>
 
   <!-- ── Progress ── -->
   <div class="progress-bar">
@@ -438,8 +443,10 @@ textarea:focus {
   </div>
   <div class="progress-text" id="progress-text">Ready</div>
 
+  <button class="btn" id="btn-show-terminal" style="margin-top:8px;width:100%;display:none">🖥 Show Terminal</button>
+
 <!-- Startup Log -->
-<div class="section-title" style="margin-top:16px">📋 Startup Log</div>
+<div class="section-title" style="margin-top:16px">Startup Log</div>
 <div id="startup-log" style="background:#111; color:#4ec04e; font-family:monospace; font-size:11px; padding:8px; max-height:120px; overflow-y:auto; border-radius:4px; white-space:pre-wrap;">Waiting for backend...</div>
 
 </div>
