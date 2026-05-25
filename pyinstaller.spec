@@ -17,6 +17,7 @@
 #   learning/       [excluded] # Training data
 #   electron-l2d/   [excluded] # Electron frontend
 
+import os
 import sys
 from pathlib import Path
 
@@ -50,6 +51,15 @@ a = Analysis(
         # --add-data for config/ directory (runtime YAML/JSON)
         [(str(PROJECT_ROOT / "config"), "config")]
         +
+        # frontend/ — REST API server + desktop UI (served at runtime)
+        [(str(PROJECT_ROOT / "frontend"), "frontend")]
+        +
+        # rules/ — rule-based behavior (read by execution channels)
+        [(str(PROJECT_ROOT / "rules"), "rules")]
+        +
+        # 雪奈.json — character persona data (loaded at startup)
+        [(str(PROJECT_ROOT / "雪奈.json"), ".")]
+        +
         # Bundle all source .py files so imports resolve correctly
         collect_src_py("src")
     ),
@@ -57,6 +67,7 @@ a = Analysis(
         # Core ML / DL frameworks
         "torch",
         "torchaudio",
+        "torchvision",
         "numpy",
         "transformers",
         "accelerate",
@@ -66,30 +77,44 @@ a = Analysis(
         "vllm",
         "cosyvoice",
         "ultralytics",
+        "onnxruntime",
+        "faster_whisper",
+        "funasr",
         # Audio / VAD
         "pywhispercpp",
         "silero_vad",
         "ten_vad",
+        "soundfile",
+        "librosa",
         # Vision
         "cv2",
         "PIL",
+        "easyocr",
         # NLP
         "spacy",
+        "spacytextblob",
         "snownlp",
-        "textblob",
         # Network / Async
         "aiohttp",
         "websockets",
+        "grpc",
+        "openai",
         # Storage / Cache
         "lancedb",
         "redis",
+        "pyarrow",
+        "pandas",
         # Graph / ML
         "networkx",
         "scipy",
         "scikit_learn",
+        # GUI / Desktop
+        "tkinter",
+        "pyautogui",
         # Config / Serialization
         "yaml",
         "json",
+        "pydantic",
     ],
     hookspath=[],
     hooksconfig={},
