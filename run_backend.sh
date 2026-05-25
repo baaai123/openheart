@@ -1,9 +1,14 @@
 #!/bin/bash
 # set -e  # v5.x: disabled - PaddleX warnings trigger exit
 
-# Source .env if it exists
+# Source .env if it exists (loop handles spaces in values)
 if [ -f "$(dirname "$0")/.env" ]; then
-    export $(grep -v '^#' "$(dirname "$0")/.env" | xargs)
+    while IFS= read -r line; do
+        case "$line" in
+            '#'*) continue ;;
+            *=*) export "$line" ;;
+        esac
+    done < "$(dirname "$0")/.env"
 fi
 
 # Activate conda
@@ -17,18 +22,18 @@ echo "=== Checking DeepSeek API ==="
 python -c "
 import os, sys
 key = os.environ.get('DEEPSEEK_API_KEY', '')
-if not key:
-    print('ERROR: DEEPSEEK_API_KEY not set')
+if not key or not key.startswith('sk-'):
+    print('ERROR: DEEPSEEK_API_KEY not set or invalid')
     sys.exit(1)
 from openai import OpenAI
-client = OpenAI(api_key=key, base_url='https://api.deepseek.com/v1')
+client = OpenAI(api_key=key.strip(), base_url='https://api.deepseek.com/v1')
 r = client.chat.completions.create(model='deepseek-v4-flash', messages=[{'role':'user','content':'ping'}], max_tokens=1)
 print('DEEPSEEK API OK')
 "
 
-# Start REST API in background (non-critical, ignore errors)
+# Start REST API in background
 echo "=== Starting REST API on port 8081 ==="
-python frontend/server.py --port 8081 > /tmp/openheart_api.log 2>&1 &
+python frontend/server.py > /tmp/openheart_api.log 2>&1 &
 API_PID=$!
 sleep 1
 
