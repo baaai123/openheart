@@ -21,7 +21,7 @@ echo.
 
 REM [2] Python backend via WSL
 echo [2/3] Python via WSL...
-wsl python %WSL_PROJECT%\scripts\demo_full.py 2>&1
+wsl python /home/baaai/projects/openheart/scripts/demo_full.py 2>&1
 echo.
 
 echo [3/3] Frontend...
