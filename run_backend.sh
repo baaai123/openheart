@@ -69,4 +69,4 @@ for arg in "$@"; do
     fi
 done
 set -- "${_ARGS[@]}"
-python scripts/demo_full.py "$@"
+python scripts/demo_full.py "$@" >> /tmp/openheart.log 2>&1

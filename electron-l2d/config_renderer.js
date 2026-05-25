@@ -429,11 +429,11 @@
         toast('Warning: WSL config write failed');
       }
 
-      // 4. Open WSL terminal to start backend
-      btn.textContent = '⏳ Opening terminal...';
-      if (api.openTerminal) {
-        api.openTerminal('wsl bash /home/baaai/projects/openheart/run_backend.sh');
-        toast('Backend starting in WSL terminal');
+      // 4. Start backend silently (no extra terminal window)
+      btn.textContent = '⏳ Starting backend...';
+      if (api.startBackend) {
+        api.startBackend();
+        toast('Backend starting silently');
       } else {
         toast('Run: wsl bash /home/baaai/projects/openheart/run_backend.sh');
       }
