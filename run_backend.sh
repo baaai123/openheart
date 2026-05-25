@@ -116,9 +116,10 @@ for arg in "$@"; do
 done
 set -- "${_ARGS[@]}"
 if $SILENT; then
-    python scripts/demo_full.py "$@" >> /tmp/openheart.log 2>&1 &
+    nohup python scripts/demo_full.py "$@" >> /tmp/openheart.log 2>&1 &
+    disown
 else
-    python scripts/demo_full.py "$@" &
+    python scripts/demo_full.py "$@"
 fi
 
 # [5/5] Done
