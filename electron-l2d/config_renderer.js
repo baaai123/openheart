@@ -418,10 +418,12 @@
 
       // 2. Save to local persistence (Electron userData + localStorage)
       btn.textContent = '⏳ Saving config...';
+      updateProgress('Saving config...', 25);
       await saveConfigToBackend();
 
       // 3. Write config files to WSL so the backend can read .env and config files
       btn.textContent = '⏳ Writing WSL config...';
+      updateProgress('Writing WSL config...', 50);
       try {
         await writeConfigFilesViaIPC(config);
       } catch (err) {
@@ -429,16 +431,18 @@
         toast('Warning: WSL config write failed');
       }
 
-      // 4. Start backend silently (no extra terminal window)
-      btn.textContent = '⏳ Starting backend...';
-      if (api.startBackend) {
-        api.startBackend();
-        toast('Backend starting silently');
+      // 4. Open WSL terminal to start backend
+      btn.textContent = '⏳ Opening terminal...';
+      updateProgress('Starting backend...', 75);
+      if (api.openTerminal) {
+        api.openTerminal('wsl bash /home/baaai/projects/openheart/run_backend.sh');
+        toast('Backend starting in WSL terminal');
       } else {
-        toast('Run: wsl bash path/to/run_backend.sh');
+        toast('Run: wsl bash /home/baaai/projects/openheart/run_backend.sh');
       }
       btn.disabled = false;
       btn.textContent = '▶ START L2D';
+      updateProgress('Ready', 100);
     });
   }
 
@@ -451,21 +455,87 @@
     initStartButton();
     startStatusPolling();
 
-function pollStartupLog() {
-  var logEl = document.getElementById('startup-log');
-  if (!logEl) return;
-  fetch('http://localhost:8081/api/health')
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      logEl.textContent = 'Backend: ONLINE\n' + (d.status || 'running');
-      logEl.style.color = '#4ec04e';
-    })
-    .catch(function() {
-      logEl.textContent = 'Backend: not running\nRun: wsl bash /home/baaai/projects/openheart/run_backend.sh';
-    });
-}
-setInterval(pollStartupLog, 3000);
-pollStartupLog();
+  // ---- Startup log ----
+
+  var _startupLogTimers = [];
+
+  function _clearStartupTimers() {
+    _startupLogTimers.forEach(function(t) { clearTimeout(t); });
+    _startupLogTimers = [];
+  }
+
+  function _showStartupMsg(msg, isError) {
+    var el = document.getElementById('startup-log');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.color = isError ? '#ff6b6b' : '#4ec04e';
+  }
+
+  function pollStartupLog() {
+    var el = document.getElementById('startup-log');
+    if (!el) return;
+
+    // Phase messages cycled over ~60s via setTimeout, matching actual load time
+    var phases = [
+      { text: 'API Check OK', delay: 2000 },
+      { text: 'TTS Loading...', delay: 15000 },
+      { text: 'YOLOE Loading...', delay: 30000 },
+      { text: 'Server Ready (port 9876)', delay: 60000 }
+    ];
+
+    function schedulePhases() {
+      _clearStartupTimers();
+      phases.forEach(function(p) {
+        var t = setTimeout(function() { _showStartupMsg(p.text); }, p.delay);
+        _startupLogTimers.push(t);
+      });
+    }
+
+    // (1) Real-time backend status via IPC (from main.js backend process)
+    if (api && api.onBackendStatus) {
+      api.onBackendStatus(function(state) {
+        _clearStartupTimers();
+        if (state === 'running') {
+          // Backend reports running — verify L2D port 9876 is open
+          fetch('http://localhost:9876')
+            .then(function() { _showStartupMsg('Server Ready (port 9876)'); })
+            .catch(function() { _showStartupMsg('Backend OK (L2D loading...)'); });
+        } else if (state === 'starting') {
+          _showStartupMsg('Starting backend...');
+          schedulePhases();
+        } else {
+          _showStartupMsg('Backend: not running\nRun: wsl bash /home/baaai/projects/openheart/run_backend.sh', true);
+        }
+      });
+    }
+
+    // (2) Real progress updates via IPC (backend startup sequence)
+    if (api && api.onBackendProgress) {
+      api.onBackendProgress(function(data) {
+        _clearStartupTimers();
+        _showStartupMsg(data.text || 'Loading...');
+      });
+    }
+
+    // (3) Fallback: poll L2D port 9876 directly
+    pollL2DPortFallback();
+  }
+
+  function pollL2DPortFallback() {
+    fetch('http://localhost:9876')
+      .then(function() {
+        _clearStartupTimers();
+        _showStartupMsg('Server Ready (port 9876)');
+      })
+      .catch(function() {
+        // Port not open yet — retry in 3s
+        var t = setTimeout(pollL2DPortFallback, 3000);
+        _startupLogTimers.push(t);
+      });
+  }
+
+  // Call once to set up listeners
+  pollStartupLog();
 
   }
 
