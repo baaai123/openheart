@@ -6,7 +6,7 @@ Endpoints:
   GET  /api/status  — backend + L2D status
   GET  /api/ping    — health check (monitoring / Docker)
 
-Runs on aiohttp, port 8081 (env: OPENMATE_API_PORT).
+Runs on aiohttp, port 8082 (env: OPENMATE_API_PORT).
 CORS open for Electron dev.
 """
 
@@ -30,7 +30,7 @@ _log = logging.getLogger("api_server")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 CONFIG_PATH = PROJECT_ROOT / "config" / "server_config.json"
 UI_CONFIG_PATH = PROJECT_ROOT / "config" / "ui_settings.json"
-DEFAULT_PORT = int(os.environ.get("OPENMATE_API_PORT", "8081"))
+DEFAULT_PORT = int(os.environ.get("OPENMATE_API_PORT", "8082"))
 _VALID_VOICE_MODES = frozenset({"asr", "text"})
 
 # Global reference to the active VoicePipeline (set at startup via set_voice_pipeline)

@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -121,12 +122,29 @@ async def handle_scan_file(request: web.Request) -> web.Response:
     return web.json_response(result)
 
 
-# ── Health endpoint ─────────────────────────────────────────────────
+# ── Health & Status endpoints ───────────────────────────────────────
 
 
 async def handle_health(request: web.Request) -> web.Response:
     """GET /api/health — lightweight liveness check."""
     return web.json_response({"status": "ok"})
+
+
+async def handle_status(request: web.Request) -> web.Response:
+    """GET /api/status — backend status for Electron config panel polling.
+    
+    Returns fields compatible with src/config/api_server.py's get_status:
+      backend, status, l2d, l2d_status, tts
+    The Electron reads status.backend || status.status and status.l2d || status.l2d_status
+    with graceful offline fallback on error.
+    """
+    return web.json_response({
+        "backend": "running",
+        "status": "running",
+        "l2d": "unknown",
+        "l2d_status": "unknown",
+        "tts": "unknown",
+    })
 
 
 # ── Chat queue endpoint ─────────────────────────────────────────────
@@ -277,6 +295,7 @@ def make_app(l2d_port: int = 9876) -> web.Application:
     app.router.add_static("/frontend", ROOT, name="frontend")
     app.router.add_static("/live2d", LIVE2D_ROOT, name="live2d")
     app.router.add_get("/api/health", handle_health)
+    app.router.add_get("/api/status", handle_status)
     app.router.add_post("/api/scan", handle_scan_text)
     app.router.add_post("/api/scan-file", handle_scan_file)
     app.router.add_post("/api/chat", handle_chat)
