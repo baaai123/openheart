@@ -36,6 +36,8 @@ class VoicePipeline:
         self.config: RuntimeConfig = config
         self.proc: subprocess.Popen[bytes] | None = proc
         self.model: Any = None  # SenseVoice AutoModel instance  # noqa: ANN401
+        # v4.5.0 §0.6 — voice enable/disable toggle for pause/resume
+        self._paused: bool = False
 
     async def start(self) -> None:
         """Load SenseVoice model and start parec mic capture if not injected.
@@ -60,6 +62,25 @@ class VoicePipeline:
             logger.info("parec capture started (pid=%d)", self.proc.pid)
         else:
             logger.info("VoicePipeline using injected proc (pid=%d)", self.proc.pid)
+
+    def pause(self) -> None:
+        """Pause microphone capture pipeline.
+        
+        v4.5.0 §0.6 — set paused flag; runtime loop checks voice_enabled
+        before processing audio chunks. In-flight TTS completes naturally.
+        """
+        self._paused = True
+        logger.info("VoicePipeline paused")
+
+    def resume(self) -> None:
+        """Resume microphone capture pipeline."""
+        self._paused = False
+        logger.info("VoicePipeline resumed")
+
+    @property
+    def voice_enabled(self) -> bool:
+        """True if microphone capture is active (not paused)."""
+        return not self._paused
 
     async def get_audio_chunk(self, n_bytes: int = 16000) -> bytes:
         """Read a raw audio chunk from the mic pipe.
