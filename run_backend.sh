@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+# set -e  # v5.x: disabled - PaddleX warnings trigger exit
 
 # Source .env if it exists
 if [ -f "$(dirname "$0")/.env" ]; then
