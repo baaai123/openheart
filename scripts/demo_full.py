@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.config.runtime import RuntimeConfig
 from src.runtime_loop import run_voice_loop  # v4.5.0 §0.6
 
-logging.basicConfig(level=logging.WARNING, format="%(name)s: %(message)s")
+logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
 logging.getLogger("cosyvoice").setLevel(logging.ERROR)
 logging.getLogger("funasr").setLevel(logging.ERROR)
 _log = logging.getLogger("demo_full")

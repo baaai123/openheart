@@ -115,7 +115,11 @@ for arg in "$@"; do
     fi
 done
 set -- "${_ARGS[@]}"
-python scripts/demo_full.py "$@" >> /tmp/openheart.log 2>&1
+if $SILENT; then
+    python scripts/demo_full.py "$@" >> /tmp/openheart.log 2>&1 &
+else
+    python scripts/demo_full.py "$@" &
+fi
 
 # [5/5] Done
 ! $SILENT && echo "[5/5] Backend launch complete!"
