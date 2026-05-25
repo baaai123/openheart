@@ -126,6 +126,7 @@ async def run_voice_loop(
     char_name: str = "雪奈",
     timeout: float = 0.0,
     stop_event: Optional[asyncio.Event] = None,
+    voice_mode: str = "asr",
 ) -> None:
     """Run the full voice pipeline: mic → ASR → DeepSeek → CosyVoice → speaker.
 
@@ -138,6 +139,8 @@ async def run_voice_loop(
         timeout: Max runtime in seconds (0 = run until stop_event).
         stop_event: External asyncio.Event for coordinated shutdown.
                     If None, SIGINT/SIGTERM will be handled internally.
+        voice_mode: "asr" for microphone → ASR pipeline, "text" for stdin keyboard input.
+                    When "text", reads from config/ui_settings.json voice_mode field.
     """
     # Ensure CosyVoice monkeypatch is applied
     # v5.x ── VisualOrchestrator (replaces inline visual pipeline init) ──
@@ -248,6 +251,17 @@ async def run_voice_loop(
     asr_model = _voice.model
     _asr_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="asr")
     proc = _voice.proc
+
+    # v4.5.0 §0.6 — start voice API server (non-blocking background task)
+    from src.config.api_server import set_voice_pipeline, create_app as _create_api_app
+    from aiohttp import web as _web
+    _api_app = _create_api_app()
+    set_voice_pipeline(_voice)
+    _api_runner = _web.AppRunner(_api_app)
+    await _api_runner.setup()
+    _api_site = _web.TCPSite(_api_runner, "127.0.0.1", int(os.environ.get("OPENMATE_API_PORT", "8081")))
+    await _api_site.start()
+    print(f"[API] Voice API server started on port {os.environ.get('OPENMATE_API_PORT', '8081')}", flush=True)
 
     # v5.x: VLM now loaded on-demand in src/insight/prompt_learner.py
 
@@ -791,95 +805,125 @@ async def run_voice_loop(
                 logger.info("Timeout (%.0fs) reached — stopping.", timeout)
                 break
 
-            # VAD-based utterance accumulation — buffer speech until silence timeout
-            raw_audio = await _voice.get_audio_chunk()
-            if not raw_audio:
-                logger.warning("parec stream ended — stopping.")
-                break
-
-            samples = (
-                np.frombuffer(raw_audio, dtype=np.int16).astype(np.float32) / 32768.0
-            )
-            _last_samples[0] = samples  # always feed level monitor
-            rms = float(np.sqrt(np.mean(samples**2)))
-
-            # Adaptive ambient tracking — update silence buffer when not speaking
-            if not _state["speech_active"]:
-                _state["ambient_rms"].append(rms)
-                if len(_state["ambient_rms"]) > 50:  # ~25s rolling window
-                    _state["ambient_rms"].pop(0)
-                ambient_mean = np.mean(_state["ambient_rms"]) if _state["ambient_rms"] else 0.002
-                _state["vad_threshold"] = max(0.01, ambient_mean * 4.0)
-
-            if rms >= _state["vad_threshold"]:  # adaptive: speech > 4.0× ambient
-                _state["speech_buf"].append(samples)
-                _state["silence_n"] = 0
-                if not _state["speech_active"]:
-                    _state["speech_active"] = True
-            else:
-                if _state["speech_active"]:
-                    _state["silence_n"] += 1
-                else:
-                    continue  # no speech yet → loop back
-
-            # Trigger ASR after silence with ≥ 0.5s of speech buffered
-            if _state["silence_n"] >= 1 and len(_state["speech_buf"]) > 1:
-                full_audio = np.concatenate(_state["speech_buf"])
-                _state["speech_buf"].clear()
-                _state["silence_n"] = 0
-
-                # v5.x — visual capture handled by VisualOrchestrator background poller
-
-                # SenseVoice ASR (blocks event loop, visual+OCR run in thread pool)
-                _t_asr_start = time.perf_counter()
-                result = await asyncio.get_running_loop().run_in_executor(
-                    _asr_pool,
-                    lambda: asr_model.generate(input=full_audio, language="zh"),
-                )
-                _t_asr = time.perf_counter() - _t_asr_start
-                print(f"[PERF] ASR: {_t_asr:.2f}s", file=sys.stderr)
-
-                # RTF guard: skip if ASR took > 10% of audio (very short/noise)
-                _audio_dur = len(_state["speech_buf"]) * 0.5
-                if _t_asr > 0 and _audio_dur > 0 and _t_asr / _audio_dur > 0.1:
-                    _state["speech_buf"].clear()
-                    _state["silence_n"] = 0
-                    _state["speech_active"] = False
+            # ── Input: ASR (mic) or text (stdin) — v4.5.0 §0.6 ──────────
+            if voice_mode == "text":
+                # Text mode: read from stdin instead of microphone ASR
+                print("\n[键盘] 请输入:", end=" ", flush=True)
+                _loop = asyncio.get_running_loop()
+                _raw_input = await _loop.run_in_executor(None, sys.stdin.readline)
+                text = _raw_input.strip()
+                if not text:
                     continue
-
-                raw = result[0]["text"] if result else ""
-                text = re.sub(r"<\|[^>]+\|>", "", raw).strip()
-                if not text or len(text) < 2:
-                    # v4.5.0 §1.4.2 — skip empty/garbled single-char ASR output
-                    _state["speech_buf"].clear()
-                    _state["silence_n"] = 0
-                    _state["speech_active"] = False
-                    continue
-
-                # v4.5.0 §1.4.5 — extract real-time emotion from SenseVoice ASR
-                _emotion_match = re.match(r'<\|([^|>]+)\|>', raw)
-                if _emotion_match:
-                    _emotion_raw = _emotion_match.group(1).lower()
-                    _emotion = {"happy":"joy","happiness":"joy","sad":"sadness",
-                               "neutral":"neutral","angry":"anger","surprised":"surprise"
-                               }.get(_emotion_raw, "neutral")
-
+                if text.lower() in ("quit", "exit", "q"):
+                    logger.info("[键盘] 用户退出.")
+                    break
+                _emotion = "neutral"
                 print(f"\n🎤 {text}")
-                if _transcript is not None:  # v4.5.0 §7.3.5 — transcript overlay conversation mode
+                if _transcript is not None:
                     _transcript.add_user_message(text)
                 _l2d_server.send_subtitle("user", text)
-                _transcript_initialized = False  # v4.5.0 §7.3.5 — reset for new user turn, first chunk does add_assistant_message
-                # v4.5.0 §5 — SharedContext: record ASR event for persistence
+                _transcript_initialized = False
+                # v4.5.0 §5 — SharedContext: record event for persistence
                 shared_ctx.set(NS_PERCEPTION, "last_asr_text", text)
                 shared_ctx.set(NS_PERCEPTION, "last_asr_ts", datetime.now(timezone.utc).isoformat())
-                # v4.5.0 §T2.4 — notify proactive heartbeat of user speech
                 if _proactive is not None:
                     _proactive.notify_user_speech()
-                _state["speech_active"] = False  # VAD done — visual poller can resume during LLM
+                _state["speech_active"] = False
                 _state["t1_api"] = time.perf_counter()
-                # v5.x — visual snapshot already maintained by VisualOrchestrator poller
             else:
-                continue  # still accumulating or no speech → loop back
+                # ASR mode: VAD-based utterance accumulation — buffer speech until silence timeout
+                # v4.5.0 §0.6 — skip if voice pipeline is paused
+                if not _voice.voice_enabled:
+                    await asyncio.sleep(0.2)
+                    continue
+                raw_audio = await _voice.get_audio_chunk()
+                if not raw_audio:
+                    logger.warning("parec stream ended — stopping.")
+                    break
+
+                samples = (
+                    np.frombuffer(raw_audio, dtype=np.int16).astype(np.float32) / 32768.0
+                )
+                _last_samples[0] = samples  # always feed level monitor
+                rms = float(np.sqrt(np.mean(samples**2)))
+
+                # Adaptive ambient tracking — update silence buffer when not speaking
+                if not _state["speech_active"]:
+                    _state["ambient_rms"].append(rms)
+                    if len(_state["ambient_rms"]) > 50:  # ~25s rolling window
+                        _state["ambient_rms"].pop(0)
+                    ambient_mean = np.mean(_state["ambient_rms"]) if _state["ambient_rms"] else 0.002
+                    _state["vad_threshold"] = max(0.01, ambient_mean * 4.0)
+
+                if rms >= _state["vad_threshold"]:  # adaptive: speech > 4.0× ambient
+                    _state["speech_buf"].append(samples)
+                    _state["silence_n"] = 0
+                    if not _state["speech_active"]:
+                        _state["speech_active"] = True
+                else:
+                    if _state["speech_active"]:
+                        _state["silence_n"] += 1
+                    else:
+                        continue  # no speech yet → loop back
+
+                # Trigger ASR after silence with ≥ 0.5s of speech buffered
+                if _state["silence_n"] >= 1 and len(_state["speech_buf"]) > 1:
+                    full_audio = np.concatenate(_state["speech_buf"])
+                    _state["speech_buf"].clear()
+                    _state["silence_n"] = 0
+
+                    # v5.x — visual capture handled by VisualOrchestrator background poller
+
+                    # SenseVoice ASR (blocks event loop, visual+OCR run in thread pool)
+                    _t_asr_start = time.perf_counter()
+                    result = await asyncio.get_running_loop().run_in_executor(
+                        _asr_pool,
+                        lambda: asr_model.generate(input=full_audio, language="zh"),
+                    )
+                    _t_asr = time.perf_counter() - _t_asr_start
+                    print(f"[PERF] ASR: {_t_asr:.2f}s", file=sys.stderr)
+
+                    # RTF guard: skip if ASR took > 10% of audio (very short/noise)
+                    _audio_dur = len(_state["speech_buf"]) * 0.5
+                    if _t_asr > 0 and _audio_dur > 0 and _t_asr / _audio_dur > 0.1:
+                        _state["speech_buf"].clear()
+                        _state["silence_n"] = 0
+                        _state["speech_active"] = False
+                        continue
+
+                    raw = result[0]["text"] if result else ""
+                    text = re.sub(r"<\|[^>]+\|>", "", raw).strip()
+                    if not text or len(text) < 2:
+                        # v4.5.0 §1.4.2 — skip empty/garbled single-char ASR output
+                        _state["speech_buf"].clear()
+                        _state["silence_n"] = 0
+                        _state["speech_active"] = False
+                        continue
+
+                    # v4.5.0 §1.4.5 — extract real-time emotion from SenseVoice ASR
+                    _emotion_match = re.match(r'<\|([^|>]+)\|>', raw)
+                    if _emotion_match:
+                        _emotion_raw = _emotion_match.group(1).lower()
+                        _emotion = {"happy":"joy","happiness":"joy","sad":"sadness",
+                                   "neutral":"neutral","angry":"anger","surprised":"surprise"
+                                   }.get(_emotion_raw, "neutral")
+
+                    print(f"\n🎤 {text}")
+                    if _transcript is not None:  # v4.5.0 §7.3.5 — transcript overlay conversation mode
+                        _transcript.add_user_message(text)
+                    _l2d_server.send_subtitle("user", text)
+                    _transcript_initialized = False  # v4.5.0 §7.3.5 — reset for new user turn, first chunk does add_assistant_message
+                    # v4.5.0 §5 — SharedContext: record ASR event for persistence
+                    shared_ctx.set(NS_PERCEPTION, "last_asr_text", text)
+                    shared_ctx.set(NS_PERCEPTION, "last_asr_ts", datetime.now(timezone.utc).isoformat())
+                    # v4.5.0 §T2.4 — notify proactive heartbeat of user speech
+                    if _proactive is not None:
+                        _proactive.notify_user_speech()
+                    _state["speech_active"] = False  # VAD done — visual poller can resume during LLM
+                    _state["t1_api"] = time.perf_counter()
+                    # v5.x — visual snapshot already maintained by VisualOrchestrator poller
+                else:
+                    continue  # still accumulating or no speech → loop back
 
             # Streaming: DeepSeek → sentences → ExecutionPipeline.speak()
             buf = ""
@@ -1700,6 +1744,11 @@ async def run_voice_loop(
                 await _memory_sync_task
             except asyncio.CancelledError:
                 pass
+        # v4.5.0 §0.6 — stop API server
+        try:
+            await _api_runner.cleanup()
+        except Exception:
+            pass
         # v4.5.0 §0.6 — Terminate parec subprocess via VoicePipeline
         await _voice.stop()
         # TTS thread pool cleanup (v4.5.0 §7.3.1)

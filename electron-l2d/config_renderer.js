@@ -11,6 +11,10 @@
     return;
   }
 
+  // ---- Constants ----
+  const BACKEND_API_BASE = 'http://localhost:8081';
+  const STATUS_POLL_INTERVAL = 3000; // ms
+
   // ---- Helpers ----
 
   function byId(id) { return document.getElementById(id); }
@@ -21,52 +25,69 @@
     el.textContent = msg;
     el.classList.add('show');
     clearTimeout(el._hide);
-    el._hide = setTimeout(() => el.classList.remove('show'), 2000);
+    el._hide = setTimeout(function () { el.classList.remove('show'); }, 2000);
   }
 
   // ---- Toggle helpers ----
 
   function setToggle(id, active) {
-    const el = byId(id);
+    var el = byId(id);
     if (!el) return;
     el.classList.toggle('active', active);
   }
 
   function isToggleActive(id) {
-    const el = byId(id);
+    var el = byId(id);
     return el ? el.classList.contains('active') : false;
   }
 
-  // ---- Save a single config key ----
+  // ---- HTTP helpers ----
 
-  function saveField(key, value) {
-    api.saveConfig({ key: key, value: value }).catch(function (err) {
-      console.warn('[config] saveConfig failed:', err);
-    });
+  function apiUrl(path) {
+    return BACKEND_API_BASE + path;
   }
 
-  // ---- Debounced save for text/number inputs ----
-
-  const debounceTimers = {};
-
-  function debouncedSave(key, value, delayMs) {
-    delayMs = delayMs || 400;
-    if (debounceTimers[key]) clearTimeout(debounceTimers[key]);
-    debounceTimers[key] = setTimeout(function () {
-      saveField(key, value);
-      toast(key + ' saved');
-    }, delayMs);
+  async function apiFetch(path, options) {
+    var url = apiUrl(path);
+    var opts = options || {};
+    opts.headers = opts.headers || {};
+    opts.headers['Content-Type'] = 'application/json';
+    var res = await fetch(url, opts);
+    if (!res.ok) {
+      var body;
+      try { body = await res.text(); } catch (_) { body = ''; }
+      throw new Error('API ' + res.status + ' ' + res.statusText + (body ? ': ' + body : ''));
+    }
+    // 204 No Content → no body
+    if (res.status === 204) return null;
+    return res.json();
   }
 
-  // ---- Populate fields from config ----
+  // ---- Build full config object from UI ----
+
+  function collectConfig() {
+    var voiceModeEl = byId('voice-mode');
+    return {
+      baseUrl: byId('api-baseurl').value || '',
+      model: byId('api-model').value || '',
+      apiKey: byId('api-key').value || '',
+      systemPrompt: byId('persona-prompt').value || '',
+      voiceEnabled: isToggleActive('tog-voice'),
+      visualEnabled: isToggleActive('tog-visual'),
+      l2dEnabled: isToggleActive('tog-l2d'),
+      voiceMode: voiceModeEl ? voiceModeEl.value : 'asr'
+    };
+  }
+
+  // ---- Populate fields from GET /api/config ----
 
   async function loadSettings() {
-    let cfg;
+    var cfg;
     try {
-      cfg = await api.loadConfig();
+      cfg = await apiFetch('/api/config');
     } catch (err) {
-      console.warn('[config] loadConfig failed:', err);
-      toast('Failed to load settings');
+      console.warn('[config] GET /api/config failed, using defaults:', err);
+      toast('Backend unreachable — using defaults');
       return;
     }
     if (!cfg) return;
@@ -83,13 +104,49 @@
     setToggle('tog-voice', cfg.voiceEnabled !== false);
     setToggle('tog-visual', cfg.visualEnabled !== false);
     setToggle('tog-l2d', cfg.l2dEnabled !== false);
+
+    // Voice mode (default 'asr')
+    var voiceModeEl = byId('voice-mode');
+    if (voiceModeEl) {
+      voiceModeEl.value = cfg.voiceMode === 'text' ? 'text' : 'asr';
+    }
+  }
+
+  // ---- Save full config to POST /api/config ----
+
+  var _saveInFlight = false;
+
+  async function saveConfigToBackend() {
+    if (_saveInFlight) return; // prevent concurrent saves
+    _saveInFlight = true;
+    var config = collectConfig();
+    try {
+      await apiFetch('/api/config', { method: 'POST', body: JSON.stringify(config) });
+      toast('Config saved');
+    } catch (err) {
+      console.warn('[config] POST /api/config failed:', err);
+      toast('Failed to save config');
+    } finally {
+      _saveInFlight = false;
+    }
+  }
+
+  // ---- Debounced full config save ----
+
+  var _debounceTimer = null;
+
+  function debouncedSaveToBackend() {
+    if (_debounceTimer) clearTimeout(_debounceTimer);
+    _debounceTimer = setTimeout(function () {
+      saveConfigToBackend();
+    }, 400);
   }
 
   // ---- Progress bar ----
 
   function updateProgress(text, percent) {
-    const fill = byId('progress-fill');
-    const label = byId('progress-text');
+    var fill = byId('progress-fill');
+    var label = byId('progress-text');
     if (fill) fill.style.width = Math.min(100, Math.max(0, percent)) + '%';
     if (label) label.textContent = text;
   }
@@ -97,13 +154,13 @@
   // ---- Status dots ----
 
   function setDotColor(id, color) {
-    const el = byId(id);
+    var el = byId(id);
     if (!el) return;
     el.className = 'status-dot ' + color;
   }
 
   function updateBackendStatus(state) {
-    const textEl = byId('status-backend-text');
+    var textEl = byId('status-backend-text');
     if (!textEl) return;
     switch (state) {
       case 'running':
@@ -121,7 +178,7 @@
   }
 
   function updateL2DStatus(state) {
-    const textEl = byId('status-l2d-text');
+    var textEl = byId('status-l2d-text');
     if (!textEl) return;
     switch (state) {
       case 'running':
@@ -138,77 +195,101 @@
     }
   }
 
+  // ---- Poll GET /api/status every 3s ----
+
+  var _statusPollTimer = null;
+
+  async function pollBackendStatus() {
+    try {
+      var status = await apiFetch('/api/status');
+
+      // Backend status — accept 'backend' or 'status' field
+      var backendState = status.backend || status.status || 'offline';
+      updateBackendStatus(backendState);
+
+      // L2D status — accept 'l2d' or 'l2d_status' field
+      var l2dState = status.l2d || status.l2d_status;
+      if (l2dState !== undefined) {
+        updateL2DStatus(l2dState);
+      }
+    } catch (err) {
+      // Backend unreachable → both offline
+      updateBackendStatus('offline');
+      updateL2DStatus('offline');
+    }
+  }
+
+  function startStatusPolling() {
+    pollBackendStatus(); // immediate first poll
+    _statusPollTimer = setInterval(pollBackendStatus, STATUS_POLL_INTERVAL);
+  }
+
+  function stopStatusPolling() {
+    if (_statusPollTimer) {
+      clearInterval(_statusPollTimer);
+      _statusPollTimer = null;
+    }
+  }
+
   // ---- Wire up inputs ----
 
   function initInputs() {
-    // API Config
-    byId('api-baseurl').addEventListener('input', function () {
-      debouncedSave('baseUrl', this.value);
-    });
-    byId('api-model').addEventListener('input', function () {
-      debouncedSave('model', this.value);
-    });
-    byId('api-key').addEventListener('input', function () {
-      debouncedSave('apiKey', this.value);
-    });
+    // API Config — debounced save on input
+    byId('api-baseurl').addEventListener('input', debouncedSaveToBackend);
+    byId('api-model').addEventListener('input', debouncedSaveToBackend);
+    byId('api-key').addEventListener('input', debouncedSaveToBackend);
 
     // Persona
-    byId('persona-prompt').addEventListener('input', function () {
-      debouncedSave('systemPrompt', this.value);
-    });
+    byId('persona-prompt').addEventListener('input', debouncedSaveToBackend);
 
-    // Toggle switches
+    // Toggle switches — immediate save on click
     byId('tog-voice').addEventListener('click', function () {
       this.classList.toggle('active');
-      saveField('voiceEnabled', this.classList.contains('active'));
+      saveConfigToBackend();
     });
     byId('tog-visual').addEventListener('click', function () {
       this.classList.toggle('active');
-      saveField('visualEnabled', this.classList.contains('active'));
+      saveConfigToBackend();
     });
     byId('tog-l2d').addEventListener('click', function () {
       this.classList.toggle('active');
-      saveField('l2dEnabled', this.classList.contains('active'));
+      saveConfigToBackend();
     });
+
+    // Voice mode switch — save on change
+    var voiceModeEl = byId('voice-mode');
+    if (voiceModeEl) {
+      voiceModeEl.addEventListener('change', function () {
+        saveConfigToBackend();
+      });
+    }
   }
 
-  // ---- Start Backend button (v4.5.0 §13 — informational) ----
+  // ---- Start Backend button ----
+  // v4.5.0 §13: POST config first, then start backend via IPC
 
   function initStartButton() {
-    byId('btn-start').addEventListener('click', function () {
-      const instructions =
-        'To start the Python backend, open a WSL terminal and run:\n\n' +
-        '  wsl bash /home/baaai/projects/openheart/run_backend.sh\n\n' +
-        'Or if running on Linux directly:\n\n' +
-        '  bash /home/baaai/projects/openheart/run_backend.sh\n\n' +
-        'The Live2D viewer connects via WebSocket once the backend is up.';
+    byId('btn-start').addEventListener('click', async function () {
+      var btn = this;
+      btn.disabled = true;
+      btn.textContent = '⏳ Saving config...';
 
-      api.showMessage(instructions).then(function () {
-        if (api.openTerminal) {
-          api.openTerminal('bash /home/baaai/projects/openheart/run_backend.sh');
-        }
-      });
+      // 1. POST current config to backend
+      await saveConfigToBackend();
+
+      // 2. Start backend via IPC
+      btn.textContent = '⏳ Starting...';
+      try {
+        await api.startBackend();
+        toast('Backend starting...');
+      } catch (err) {
+        console.warn('[config] startBackend failed:', err);
+        toast('Failed to start backend');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '▶ START L2D';
+      }
     });
-  }
-
-  // ---- IPC status / progress listeners ----
-
-  function initStatusListeners() {
-    if (api.onBackendStatus) {
-      api.onBackendStatus(function (state) {
-        updateBackendStatus(state);
-      });
-    }
-    if (api.onL2DStatus) {
-      api.onL2DStatus(function (state) {
-        updateL2DStatus(state);
-      });
-    }
-    if (api.onBackendProgress) {
-      api.onBackendProgress(function (data) {
-        updateProgress(data.text || '', data.percent || 0);
-      });
-    }
   }
 
   // ---- Init ----
@@ -217,7 +298,7 @@
     loadSettings();
     initInputs();
     initStartButton();
-    initStatusListeners();
+    startStatusPolling();
   }
 
   if (document.readyState === 'loading') {
