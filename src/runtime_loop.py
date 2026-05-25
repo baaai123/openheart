@@ -187,7 +187,9 @@ async def run_voice_loop(
     # ── 0. Load ui_settings.json for feature toggles ──────────────
     _ui_settings = _load_ui_settings()
     _visual_enabled = _ui_settings.get("visual_enabled", True)
-    logger.info("Config from ui_settings.json: visual_enabled=%s", _visual_enabled)
+    # v4.5.0 §0.6 — voice_mode override from ui_settings.json (persisted by /api/config)
+    voice_mode = _ui_settings.get("voice_mode", voice_mode)
+    logger.info("Config from ui_settings.json: visual_enabled=%s, voice_mode=%s", _visual_enabled, voice_mode)
 
     # v5.x ── VisualOrchestrator (replaces inline visual pipeline init) ──
     # Owns: VisualPipeline, WindowAttentionPipeline, FusionPipeline, SyncVisionQuery

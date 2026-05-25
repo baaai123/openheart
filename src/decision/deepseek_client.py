@@ -64,9 +64,18 @@ def _load_prompt_modules() -> dict:
     except Exception:
         return {}
 
-def build_system_prompt() -> str:
-    """Assemble system prompt from config/prompt_modules.json."""
+def build_system_prompt(persona_override: str | None = None) -> str:
+    """Assemble system prompt from config/prompt_modules.json.
+
+    Args:
+        persona_override: If provided, replaces the persona section from
+            prompt_modules.json. Used by live config reload to inject the
+            custom persona from server_config.json without losing other
+            instruction modules (output_format, rules, capabilities, teaching).
+    """
     pm = _load_prompt_modules()
+    if persona_override is not None:
+        pm["persona"] = persona_override
     parts = []
     if pm.get("persona"):
         parts.append(pm["persona"])

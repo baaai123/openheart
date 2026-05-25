@@ -526,7 +526,10 @@ class DecisionBridge:
         if cfg.get("apiKey"):
             self.decision_engine.api_key = cfg["apiKey"]
         if cfg.get("systemPrompt"):
-            self.decision_engine.system_prompt = cfg["systemPrompt"]
+            from src.decision.deepseek_client import build_system_prompt
+            self.decision_engine.system_prompt = build_system_prompt(
+                persona_override=cfg["systemPrompt"],
+            )
         logger.info("Decision engine reconfigured (model=%s)", self.decision_engine.model)
 
     def _init_baseline_personality(self) -> BaselinePersonality | None:
