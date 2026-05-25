@@ -1,4 +1,4 @@
 {
-  "visual_enabled": true,
-  "voice_mode": "asr"
+  "visual_enabled": false,
+  "voice_mode": "text"
 }

@@ -868,18 +868,47 @@ async def run_voice_loop(
         print("[L2D] Avatar connected — lip-sync active", flush=True)
 
     # ── Chat queue helpers — v4.5.0 §0.6 ───────────────────────────
+    # Buffer for entries read via atomic rename; avoids TOCTOU race
+    # with concurrent writers (frontend/server.py handle_chat appends
+    # while we would otherwise read+truncate).
+    _chat_queue_buffer: list[str] = []
 
     async def _poll_chat_queue() -> str | None:
-        """Read one entry from /tmp/openheart_chat_queue.jsonl. Returns text or None."""
+        """Read one entry from /tmp/openheart_chat_queue.jsonl. Returns text or None.
+        Uses atomic rename to prevent TOCTOU race: renames the file to a .PID.tmp
+        before reading, so concurrent frontend appends go to a fresh file without
+        colliding. All entries from the renamed file are buffered and returned one
+        per call.  # v4.5.0 §0.6
+        """
+        # Return buffered entries first (from a previous atomic read)
+        if _chat_queue_buffer:
+            return _chat_queue_buffer.pop(0)
+
+        print('POLLING chat queue...', flush=True)
         chat_queue_path = Path("/tmp/openheart_chat_queue.jsonl")
         if not chat_queue_path.exists():
             return None
+
+        # Atomic rename: new writes land in a fresh file; we own the old content
+        pid = os.getpid()
+        tmp_path = chat_queue_path.with_name(
+            f"{chat_queue_path.name}.{pid}.tmp"
+        )
         try:
-            with open(chat_queue_path, "r", encoding="utf-8") as _qf:
-                lines = _qf.readlines()
-            # Clear file after reading to prevent reprocessing
-            with open(chat_queue_path, "w", encoding="utf-8") as _qf:
-                _qf.write("")
+            chat_queue_path.rename(tmp_path)
+        except FileNotFoundError:
+            # Only safe: file was consumed by another poll() call
+            return None
+        except OSError as exc:
+            logger.warning(
+                "Failed to rename chat queue. trace_id=%s error=%s",
+                uuid.uuid4().hex[:12], exc,
+            )
+            return None
+
+        # Read all entries from the renamed (now exclusively-owned) file
+        try:
+            lines = tmp_path.read_text(encoding="utf-8").splitlines()
             for line in lines:
                 line = line.strip()
                 if not line:
@@ -888,15 +917,23 @@ async def run_voice_loop(
                     entry = json.loads(line)
                     candidate = entry.get("text", "")
                 except json.JSONDecodeError:
+                    # v4.5.0 — skip malformed lines; they won't be retried
                     continue
                 if candidate:
-                    return candidate
+                    _chat_queue_buffer.append(candidate)
         except Exception as exc:
             logger.warning(
-                "Failed to read chat queue. trace_id=%s error=%s",
+                "Failed to read chat queue temp file. trace_id=%s error=%s",
                 uuid.uuid4().hex[:12], exc,
             )
-        return None
+        finally:
+            # Clean up temp file regardless of success/failure
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+        return _chat_queue_buffer.pop(0) if _chat_queue_buffer else None
 
     async def _handle_chat_text(text: str) -> None:
         """Process received chat text — transcript, L2D, shared ctx, state updates."""

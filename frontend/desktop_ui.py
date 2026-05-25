@@ -5,6 +5,8 @@ visual preview, chat log, and one-click backend startup.
 """
 from __future__ import annotations
 
+import json
+import logging
 import os
 import re
 import subprocess
@@ -15,6 +17,7 @@ from pathlib import Path
 
 # ── Constants ──────────────────────────────────────────────────────────
 ROOT     = Path(__file__).resolve().parent.parent
+_log     = logging.getLogger("desktop_ui")
 ENV_FILE = ROOT / ".env"
 L2D_WIN_PATH = "D:\\electron-l2d"        # Windows path for electron-l2d
 L2D_WSL_PATH = "/mnt/d/electron-l2d"     # WSL mount of the same
@@ -418,10 +421,22 @@ class DesktopUI:
         env["DEEPSEEK_MODEL"]    = self.model_var.get()
         env["DEEPSEEK_API_KEY"]  = self.apikey_var.get()
 
+        # Read ui_settings.json to determine voice mode (text vs asr/mic)
         try:
+            ui_settings = json.loads((ROOT / "config" / "ui_settings.json").read_text())
+        except (FileNotFoundError, json.JSONDecodeError, OSError) as exc:
+            _log.warning("ui_settings.json not readable, defaulting to asr: %s", exc)
+            ui_settings = {}
+        voice_mode = ui_settings.get("voice_mode", "asr")
+
+        try:
+            cmd = ["conda", "run", "-n", "cv311", "python",
+                   str(demo_path), "--mode", "voice"]
+            if voice_mode == "text":
+                cmd.extend(["--voice-mode", "text"])
+
             self._voice_proc = subprocess.Popen(
-                ["conda", "run", "-n", "cv311", "python",
-                 str(demo_path), "--mode", "voice"],
+                cmd,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, bufsize=1, env=env,
             )
