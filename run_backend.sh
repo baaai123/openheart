@@ -26,7 +26,9 @@ if [ -f "$ENV_FILE" ]; then
     done < "$ENV_FILE"
 fi
 
-source /home/baaai/miniforge3/etc/profile.d/conda.sh
+# Detect conda base dynamically, fall back to default path
+_CONDA_BASE=$(conda info --base 2>/dev/null || echo "/home/baaai/miniforge3")
+source "$_CONDA_BASE/etc/profile.d/conda.sh"
 if $SILENT; then
     conda activate cv311 2>/dev/null
 else

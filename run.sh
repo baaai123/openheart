@@ -11,6 +11,10 @@ export VLLM_PLUGINS=""
 pkill -f "VLLM::EngineCore" 2>/dev/null || true
 sleep 0.5
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
-exec /home/baaai/miniforge3/envs/cv311/bin/python3 scripts/demo_full.py --mode voice --timeout "${1:-300}" > /tmp/openheart.log 2>&1
+
+# Detect conda prefix dynamically, fall back to default path
+_CONDA_BASE=$(conda info --base 2>/dev/null || echo "/home/baaai/miniforge3")
+_PYTHON="$_CONDA_BASE/envs/cv311/bin/python3"
+exec "$_PYTHON" scripts/demo_full.py --mode voice --timeout "${1:-300}" > /tmp/openheart.log 2>&1
 
 # v5.x: Limit PyTorch CUDA allocator fragmentation (reduces VRAM bloat)
