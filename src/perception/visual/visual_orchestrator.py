@@ -193,7 +193,7 @@ class VisualOrchestrator:
             self._prompt_memory._gate = gate
         if self._prompt_memory:
             self._prompt_memory._gate = gate
-            print("[记忆] PromptMemory → RetrievalGate wired for T3 cold storage", flush=True)
+            logger.info("PromptMemory → RetrievalGate wired for T3 cold storage")
 
     # ------------------------------------------------------------------
     # Visual memory store (LanceDB, lazy-init)
@@ -282,17 +282,8 @@ class VisualOrchestrator:
         _cycle_count = 0
         while not self._stop_event.is_set():
             await asyncio.sleep(3.0)  # v5.x: 3s window-attention cycle
-            print(f"[POLLER] cycle #{_cycle_count} start", flush=True)
             _cycle_count += 1
             _t0 = time.monotonic()
-            # [VRAM TRACE] Baseline at cycle start
-            try:
-                import torch as _vt0
-                _vfree0, _vtotal0 = _vt0.cuda.mem_get_info()
-                print(f"[VRAM][{_cycle_count}] CYCLE START: free={_vfree0/1e9:.2f}GB used={(_vtotal0-_vfree0)/1e9:.2f}GB", flush=True)
-                del _vt0
-            except Exception:
-                pass
 
             # v5.x: Skip visual during TTS to avoid GPU contention
             if self._execution and self._execution.is_speaking():
@@ -368,36 +359,15 @@ class VisualOrchestrator:
                             layer="perception", component="region_proposer",
                             operation="propose",
                         ):
-                            import torch as _torch
-                            _free_before, _total = _torch.cuda.mem_get_info()
-                            print(f"[VRAM][{_cycle_count}] BEFORE RegionProposer.propose: free={_free_before/1e9:.2f}GB / total={_total/1e9:.2f}GB (used={(_total-_free_before)/1e9:.2f}GB)", flush=True)
-
                             bboxes = await asyncio.get_running_loop().run_in_executor(
                                 self._visual_pool, self._region_proposer.propose, yoloe_input
                             )
-
-                        # [VRAM TRACE] After RegionProposer.propose
-                        _free_after, _ = _torch.cuda.mem_get_info()
-                        print(f"[VRAM][{_cycle_count}] AFTER RegionProposer.propose: free={_free_after/1e9:.2f}GB (delta={(_free_before-_free_after)/1e9:.3f}GB)", flush=True)
-                        del _torch
                         context_tags = self._get_context_tags(top_windows)
                         # v5.x: Cold start — label bboxes as "unknown" until VLM learns concepts
                         if self._concept_classifier is None:
                             if self._prompt_memory and self._prompt_memory.list_concepts():
-                                # [VRAM TRACE] Before ConceptClassifier creation (lazy-load)
-                                import torch as _torch2
-                                _free_b4, _total2 = _torch2.cuda.mem_get_info()
-                                print(f"[VRAM][{_cycle_count}] BEFORE ConceptClassifier.__init__: free={_free_b4/1e9:.2f}GB (used={(_total2-_free_b4)/1e9:.2f}GB)", flush=True)
-                                del _torch2
-
                                 self._concept_classifier = ConceptClassifier(self._prompt_memory)
                                 self._prompt_learner.set_compute_vpe(self._concept_classifier.compute_vpe)
-
-                                # [VRAM TRACE] After ConceptClassifier creation
-                                import torch as _torch2b
-                                _free_af, _total2b = _torch2b.cuda.mem_get_info()
-                                print(f"[VRAM][{_cycle_count}] AFTER ConceptClassifier.__init__: free={_free_af/1e9:.2f}GB (delta={(_free_b4-_free_af)/1e9:.3f}GB, used={(_total2b-_free_af)/1e9:.2f}GB)", flush=True)
-                                del _torch2b
 
                                 self._log("[视觉v5] ConceptClassifier lazy-loaded (PromptMemory has concepts)", flush=True)
                             else:
@@ -413,21 +383,10 @@ class VisualOrchestrator:
                                 layer="perception", component="concept_classifier",
                                 operation="classify_with_bboxes",
                             ):
-                                import torch as _torch3
-                                _free_b4_cc, _total3 = _torch3.cuda.mem_get_info()
-                                print(f"[VRAM][{_cycle_count}] BEFORE ConceptClassifier.classify_with_bboxes: free={_free_b4_cc/1e9:.2f}GB", flush=True)
-                                del _torch3
-
                                 _yoloe_concepts = await asyncio.get_running_loop().run_in_executor(
                                     self._visual_pool,
                                     lambda: self._concept_classifier.classify_with_bboxes(yoloe_input, bboxes, context_tags)
                                 ) if self._concept_classifier.available else []
-
-                            # [VRAM TRACE] After ConceptClassifier.classify_with_bboxes
-                            import torch as _torch3b
-                            _free_af_cc, _ = _torch3b.cuda.mem_get_info()
-                            print(f"[VRAM][{_cycle_count}] AFTER ConceptClassifier.classify_with_bboxes: free={_free_af_cc/1e9:.2f}GB (delta={(_free_b4_cc-_free_af_cc)/1e9:.3f}GB)", flush=True)
-                            del _torch3b
                         # v5.x: Sort concepts by mouse distance, keep nearest N
                         _mx, _my = mouse_xy
                         def _dist(c):
@@ -530,7 +489,6 @@ class VisualOrchestrator:
                 # Track 2: Learning (async) — low-conf concepts → VLM queue
                 if self._prompt_learner and _yoloe_concepts:
                     try:
-                        print(f"[LEARN-DIAG] _yoloe_concepts={len(_yoloe_concepts)} items, checking low conf...", flush=True)
                         low_conf = [
                             c for c in _yoloe_concepts
                             if c.get("confidence", 0) < 0.5
@@ -582,7 +540,6 @@ class VisualOrchestrator:
                     if _yoloe_concepts:
                         concept_names = [c["name"] for c in _yoloe_concepts]
                         unique_names = list(dict.fromkeys(concept_names))
-                        print(f"[DIAG-YOLOE] names={unique_names} n={len(_yoloe_concepts)}", flush=True)
                         if len(unique_names) == 1 and unique_names[0] == "unknown":
                             yolo_scene = f"检测到{len(_yoloe_concepts)}个区域, VLM学习中"
                         else:

@@ -309,7 +309,7 @@ async def run_voice_loop(
         _asr_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="asr")
         proc = _voice.proc
     else:
-        print("TEXT MODE ACTIVE — mic/ASR startup skipped", flush=True)
+        logger.info("TEXT MODE ACTIVE — mic/ASR startup skipped")
         _voice = None
         asr_model = None
         _asr_pool = None
@@ -325,7 +325,7 @@ async def run_voice_loop(
     await _api_runner.setup()
     _api_site = _web.TCPSite(_api_runner, "127.0.0.1", int(os.environ.get("OPENMATE_API_PORT", "8082")))
     await _api_site.start()
-    print(f"[API] Voice API server started on port {os.environ.get('OPENMATE_API_PORT', '8082')}", flush=True)
+    logger.info("Voice API server started on port %s", os.environ.get("OPENMATE_API_PORT", "8082"))
 
     # v5.x: VLM now loaded on-demand in src/insight/prompt_learner.py
 
@@ -474,11 +474,11 @@ async def run_voice_loop(
         from src.perception.visual.types import VisionSnapshot
         await asyncio.to_thread(_fusion_pipeline.process_sync, "预热", VisionSnapshot())
         _fusion_available = True
-        print("[融合] 预热完成")
+        logger.info("Fusion pipeline warmup complete")
     except Exception:
         if _fusion_pipeline:
             _fusion_available = True
-        print("[融合] 预热跳过 (非致命)")
+        logger.warning("Fusion pipeline warmup skipped (non-fatal)")
 
     # ── 3.8 SyncVisionQuery (visual closed-loop verification) ───────
     # v4.5.0 §7.4.2: pre-click ROI verify + post-click frame confirmation
@@ -858,14 +858,14 @@ async def run_voice_loop(
     _l2d_wait_printed = False
     while not _l2d_server._clients and timeout > 0:
         if not _l2d_wait_printed:
-            print("\n[L2D] Waiting for Electron avatar to connect...", flush=True)
+            logger.info("Waiting for Electron avatar to connect...")
             _l2d_wait_printed = True
         await asyncio.sleep(0.5)
         if time.monotonic() - _l2d_wait_start > 30:
-            print("[L2D] No avatar connected — continuing without lip-sync", flush=True)
+            logger.warning("No avatar connected — continuing without lip-sync")
             break
     if _l2d_server._clients:
-        print("[L2D] Avatar connected — lip-sync active", flush=True)
+        logger.info("Avatar connected — lip-sync active")
 
     # ── Chat queue helpers — v4.5.0 §0.6 ───────────────────────────
     # Buffer avoids TOCTOU race: atomic rename replaces read+truncate pattern
@@ -1028,7 +1028,7 @@ async def run_voice_loop(
                             lambda: asr_model.generate(input=full_audio, language="zh"),
                         )
                         _t_asr = time.perf_counter() - _t_asr_start
-                        print(f"[PERF] ASR: {_t_asr:.2f}s", file=sys.stderr)
+                        logger.debug("ASR inference: %.2fs", _t_asr)
 
                         # RTF guard: skip if ASR took > 10% of audio (very short/noise)
                         _audio_dur = len(_state["speech_buf"]) * 0.5
@@ -1090,7 +1090,6 @@ async def run_voice_loop(
             except NameError:
                 _emotion = "neutral"  # v4.5.0 §4.3 — default emotion label
             logger.info("[视觉→LLM] %s", _visual_summary[:300] if _visual_summary else "(empty)")
-            print("[CONTEXT] visual_summary=" + ("set" if _visual_summary else "EMPTY"), flush=True)
             try:
                 result = await _orchestrator.decide(
                     user_input=text,
@@ -1158,7 +1157,6 @@ async def run_voice_loop(
                                     _speak_ptr = len(_speak_queue) - 1
                                     _sub_text = _merged
                                     print(f"\n{char_name}: {_merged}")
-                                    print(f"[TTS-DEBUG] sent={_merged[:30]}...", flush=True)
                                     await _execution.speak(
                                         _merged,
                                         sentence_index=_speak_ptr,
@@ -1189,7 +1187,6 @@ async def run_voice_loop(
                             if _speak_ptr < len(_speak_queue):
                                 _merged = "".join(_speak_queue[_speak_ptr:])
                                 print(f"\n{char_name}: {_merged}")
-                                print(f"[TTS-DEBUG] final={_merged[:30]}...", flush=True)
                                 # v4.5.0 §7.3.5 — update subtitle for final flushed text before speak()
                                 # Use accumulated `reply` for transcript to preserve full context.
                                 _reply_clean = re.sub(r"<(mouse|keyboard)>.*?</\1>", "", reply, flags=re.DOTALL)
@@ -1321,7 +1318,6 @@ async def run_voice_loop(
             await _execution.drain_mic_echo()
             print()
             if not reply:
-                print(f"[LLM-REPLY] response={repr(reply[:100])}", flush=True)
                 logger.warning("Empty voice_response")
                 continue
 
@@ -1370,7 +1366,6 @@ async def run_voice_loop(
                     }
 
                     # v5.x: Write to cold memory (LanceDB) directly
-                    print(f"[MEMORY] _cold_store={'SET' if '_cold_store' in dir() else 'MISSING'} type={type(_cold_store).__name__ if '_cold_store' in dir() else 'N/A'}", flush=True)
                     try:
                         if _cold_store is not None:
                             from src.memory.cold.memory_store import Scene as ColdScene
@@ -1385,7 +1380,7 @@ async def run_voice_loop(
                             await _cold_store.store_scene(_scene_obj)
                             logger.info("Cold memory stored: %s", _scene_id[:8])
                     except Exception as _ce:
-                        print(f'[MEMORY] Cold write FAILED: {_ce}', flush=True)
+                        logger.warning("Cold memory write FAILED: %s", _ce)
 
                     if _emotion_label in ("joy", "sadness"):
                         # v4.5.0 §8.2 — Easter egg check on high-emotion moments
@@ -1626,10 +1621,9 @@ async def run_voice_loop(
                                             await _scheduler.enqueue(
                                                 "mouse_move", target_x=_cx, target_y=_cy,
                                             )
-                                            print(
-                                                f"[DEBUG-ROI] matched '{_action_target}' "
-                                                f"via mouse ROI OCR at ({_cx},{_cy})",
-                                                file=sys.stderr,
+                                            logger.debug(
+                                                "ROI matched '%s' via mouse OCR at (%d,%d)",
+                                                _action_target, _cx, _cy,
                                             )
                                             break
                                 except asyncio.TimeoutError:
@@ -1752,10 +1746,9 @@ async def run_voice_loop(
                                                 await _scheduler.enqueue(
                                                     "mouse_move", target_x=_cx, target_y=_cy,
                                                 )
-                                                print(
-                                                    f"[DEBUG-ROI] matched '{_target_desc}' "
-                                                    f"via mouse ROI OCR at ({_cx},{_cy})",
-                                                    file=sys.stderr,
+                                                logger.debug(
+                                                    "ROI matched '%s' via mouse OCR at (%d,%d)",
+                                                    _target_desc, _cx, _cy,
                                                 )
                                                 break
                                     except asyncio.TimeoutError:
@@ -1917,4 +1910,4 @@ async def run_voice_loop(
         except Exception:
             pass
 
-        print("\nShutdown complete.")
+        logger.info("Shutdown complete")

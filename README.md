@@ -1,35 +1,125 @@
 # OpenHeart
 
-**有温度的 AI 虚拟伙伴 / A Virtual Companion That Cares**
+**有温度的 AI 虚拟伙伴 — A Virtual Companion That Cares**
 
-OpenHeart 是一款多模态 AI 虚拟伙伴，集成语音对话、实时屏幕视觉感知、五层记忆系统和 Live2D 可交互形象。她在本地 GPU 上运行（RTX 3080 Ti 16GB），能看见你的屏幕、听见你的声音、记住你们的过去。
-
-OpenHeart is a multi-modal AI companion with voice dialogue, real-time screen perception, a 5-tier memory system, and a Live2D interactive avatar. She runs on local GPU (RTX 3080 Ti 16GB), sees your screen, hears your voice, and remembers your shared history.
+OpenHeart is a multi-modal AI companion that integrates voice dialogue, real-time screen perception, a 5-tier memory system, and a Live2D interactive avatar. She runs on local GPU, sees your screen, hears your voice, and remembers your shared history.
 
 ---
 
-## 语音闭环 / Voice Closed Loop (Working)
+## System Requirements
 
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| **GPU** | NVIDIA RTX 3070 8GB | NVIDIA RTX 3080 Ti 16GB |
+| **VRAM** | 7.5 GB (Low tier) | ≥ 15.5 GB (High tier) |
+| **RAM** | 16 GB | 32 GB |
+| **OS** | Linux (Ubuntu 22.04+) | Linux (Ubuntu 22.04+) |
+| **CUDA** | 12.1+ | 12.4+ |
+| **Python** | 3.11 | 3.11 |
+| **Redis** | 7.2+ | 7.2+ |
+
+VRAM tiers are auto-detected at startup:
+- **Low** (≥7.5 GB): No shadow verification, no YOLO-World, CosyVoice on CPU
+- **Medium** (≥11.5 GB): No shadow verification, Whisper medium
+- **High** (≥15.5 GB): All models + shadow verification enabled
+
+---
+
+## Quick Start
+
+### 1. Clone and setup
+
+```bash
+git clone https://github.com/yourusername/openheart.git
+cd openheart
+conda create -n openheart python=3.11 -y
+conda activate openheart
 ```
-Mic (parec) → SenseVoice ASR (funasr) → DeepSeek API → CosyVoice3-0.5B TTS (vLLM) → Speaker (paplay)
+
+### 2. Install dependencies
+
+```bash
+# Core dependencies
+pip install -r requirements.txt  # if available, or use environment.yml
+# Alternative: conda environment
+conda env update -f environment.yml
 ```
 
-一键启动：`python scripts/demo_full.py`
+### 3. Configure environment
 
-Single command to launch the full pipeline: `python scripts/demo_full.py`
+```bash
+cp .env.example .env
+# Edit .env with your API keys:
+#   DEEPSEEK_API_KEY=sk-your-deepseek-key
+#   DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+#   DEEPSEEK_MODEL=deepseek-v4-flash
+#   VLM_API_KEY=sk-your-vlm-key (optional, for visual prompt learning)
+```
 
-## 屏幕视觉 / Screen Vision (Working)
+### 4. Start Redis
 
+```bash
+redis-server
+```
+
+### 5. Download models
+
+Model files are too large to bundle. Run the setup script to download:
+
+```bash
+bash scripts/setup_env.sh
+```
+
+This will download:
+- SenseVoice ASR model (~1.5 GB)
+- CosyVoice3-0.5B TTS model (~4.8 GB)
+- YOLOE detection models (~1.5 GB total)
+- bge-small-zh-v1.5 embedding model
+
+### 6. Run OpenHeart
+
+**Voice mode** (mic → ASR → LLM → TTS → speaker):
+
+```bash
+python scripts/demo_full.py
+```
+
+**Text mode** (keyboard input, no mic needed):
+
+```bash
+python scripts/demo_full.py --voice-mode text
+```
+
+### 7. (Optional) Live2D Avatar + Control Panel
+
+```bash
+# Terminal 1: Live2D avatar (requires Electron)
+cd electron-l2d && npm install && npm start
+
+# Terminal 2: Web control panel
+python frontend/server.py
+# Open http://localhost:8000 in browser
+```
+
+---
+
+## Features
+
+### Voice Dialogue
+- **ASR**: SenseVoice (funasr, iic/SenseVoiceSmall) — real-time Chinese/English speech recognition
+- **LLM**: DeepSeek API (streaming) — conversational intelligence
+- **TTS**: CosyVoice3-0.5B (vLLM, ~4.8 GB VRAM) — natural voice synthesis
+- Pipeline: `Mic → VAD → ASR → DeepSeek → CosyVoice → Speaker`
+
+### Screen Vision
 Two-stage YOLOE detection pipeline + VLM concept learning:
+- **RegionProposer**: YOLOE-small PF mode (~0.3 GB VRAM, ~17ms), bounding box proposals
+- **ConceptClassifier**: YOLOE-large SAVPE/text-prompt (~0.7 GB VRAM), concept classification
+- **PromptLearner**: MiniCPM-V-4.6 (cloud API) — learns new visual concepts
+- **OCR**: EasyOCR on window regions
+- **SpatialGraph + EntityGraph**: spatial relationship tracking across frames
 
-- **RegionProposer**: YOLOE-small PF mode (~0.3 GB VRAM, ~17ms), outputs raw bounding boxes
-- **ConceptClassifier**: YOLOE-large SAVPE/text-prompt (~0.7 GB VRAM, ~100ms), classifies with learned visual prompts
-- **PromptLearner**: MiniCPM-V-4.6 (cloud API at api.modelbest.cn) learns new concepts into PromptMemory (68+ concepts stored)
-- **OCR**: EasyOCR on window crops
-- **SpatialGraph + EntityGraph**: track spatial relationships across frames via networkx
-- **ReflectionEngine**: background 5s loop, discovers patterns from EntityGraph → stored in deep memory
-
-## 五层记忆 / 5-Tier Memory
+### 5-Tier Memory
 
 | Tier | Backend | Role |
 |------|---------|------|
@@ -39,68 +129,49 @@ Two-stage YOLOE detection pipeline + VLM concept learning:
 | COLD (T3) | LanceDB | Long-term archive (24h sync) |
 | DEEP (T4) | LanceDB | Pattern insights (min 3 occurrences) |
 
-Extra: **RetrievalGate** (composite scoring: recency 0.4, relevance 0.4, importance 0.2), **EntityGraph**, **ReflectionEngine**, **query_visual** tool for LLM.
-
-## Live2D 虚拟形象 / Live2D Avatar
-
-Electron app at `electron-l2d/`. WebSocket bridge (port 9876) to Python.
-
-- **Mouth sync**: start/finish signals from TTS
-- **Eye tracking**: global cursor polling (33ms)
-- **Expressions**: smile, sad, surprised, blush, glasses, elf_ears, dark_face (xiaoyue model)
-- **Transparent window**, click-through mode (Ctrl+Shift+P)
-
-## 控制面板 / Control Panel
-
-`frontend/index.html` — API config, persona editor, module toggles, status panel, one-click start + progress bar.
-
-## 技术栈 / Tech Stack
-
-| Category | Components |
-|----------|-----------|
-| **GPU** | NVIDIA RTX 3080 Ti 16GB |
-| **ASR** | SenseVoice (funasr, iic/SenseVoiceSmall) |
-| **LLM** | DeepSeek API (stream_decide) |
-| **TTS** | CosyVoice3-0.5B (vLLM, ~4.8 GB) |
-| **Vision** | YOLOE-v8s (PF + SAVPE, ~1.5 GB total) + MiniCPM-V-4.6 (cloud API) |
-| **OCR** | EasyOCR (PaddleOCR-ONNX backend) |
-| **Memory** | Redis 7.2 (Stream/Hash) + LanceDB |
-| **Avatar** | Electron + PixiJS + pixi-live2d-display (Cubism 4) |
-| **Personality** | 雪奈 — tsundere/gremlin/哥们 style (prompt_modules.json) |
-
-## VRAM 占用 / VRAM Usage
-
-| Component | VRAM |
-|-----------|------|
-| CosyVoice3 (vLLM) | ~4.8 GB |
-| YOLOE (RegionProposer + ConceptClassifier) | ~1.5 GB total |
-| SenseVoice | ~250 MB |
-| VLM (MiniCPM-V-4.6) | 0 GB (cloud API) |
-
-Startup auto-detects VRAM tier (HIGH ≥12 GB / LOW <12 GB).
-
-## 快速开始 / Quick Start
-
-```bash
-# 1. 安装依赖 / Install dependencies
-conda create -n openheart python=3.11 -y
-bash scripts/setup_env.sh
-
-# 2. 启动 Redis / Start Redis
-redis-server
-
-# 3. 设置 API 密钥 / Set API keys
-export DEEPSEEK_API_KEY="sk-..."
-export VLM_API_KEY="sk-..."
-
-# 4. 运行语音 Demo / Run voice demo
-python scripts/demo_full.py
-
-# 5. （可选）启动 Live2D + 控制面板 / (Optional) Start L2D + panel
-cd electron-l2d && npm start    # Live2D avatar
-python frontend/server.py       # Control panel at http://localhost:8000
-```
+### Live2D Avatar
+- Electron + PixiJS + pixi-live2d-display (Cubism 4)
+- WebSocket bridge (port 9876) to Python
+- Mouth sync, eye tracking, expression control
+- Transparent window with click-through mode
 
 ---
 
-*OpenHeart — 不只是 AI，而是有温度的陪伴。 / Not just AI, but a companion with warmth.*
+## Configuration
+
+All configuration files are in `config/`:
+
+| File | Purpose |
+|------|---------|
+| `audio.yaml` | Audio pipeline settings |
+| `baseline.json` | Personality baseline (雪奈) |
+| `easter_eggs.json` | Hidden trigger responses |
+| `emotion_params.yaml` | Emotion model parameters |
+| `endpoints.yaml` | API endpoint configurations |
+| `fast_path_rules.yaml` | Fast-path decision rules |
+| `live2d.yaml` | Live2D avatar settings |
+| `memory.yaml` | Memory tier configurations |
+| `model_paths.yaml` | Model file locations |
+| `sentiment.yaml` | Sentiment analysis settings |
+| `thresholds.yaml` | System thresholds |
+| `transcript_overlay.yaml` | Transcript overlay settings |
+
+---
+
+## Troubleshooting
+
+**Out of VRAM error**
+→ Lower VRAM tier is auto-selected. Close other GPU applications. Set `COSYVOICE_CPU=1` to run TTS on CPU.
+
+**No audio input**
+→ Check `parec` is available: `parec --list-sources`. On PulseAudio systems, install `pulseaudio-utils`.
+
+**Live2D not showing**
+→ The avatar runs as a separate Electron app in `electron-l2d/`. Run `cd electron-l2d && npm install && npm start`. Fallback text bubble mode activates automatically if L2D is unavailable.
+
+**Redis connection refused**
+→ Start Redis: `redis-server`. Default port is 6379.
+
+---
+
+*OpenHeart — 不只是 AI，而是有温度的陪伴。Not just AI, but a companion with warmth.*

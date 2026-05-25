@@ -47,11 +47,8 @@ archive/
 backup*/
 openheart-backup*/
 
-# Sisyphus (keep boulder.json)
-.sisyphus/plans/
-.sisyphus/evidence/
-.sisyphus/notepads/
-.sisyphus/drafts/
+# Sisyphus
+.sisyphus/
 
 # Chinese spec files
 多模态智能体架构工程规格书v4.5.0.md
