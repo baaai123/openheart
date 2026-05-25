@@ -39,6 +39,9 @@ _voice_pipeline_ref: VoicePipeline | None = None
 # Callback fired when LLM-relevant config fields (baseUrl, model, apiKey, systemPrompt) change
 _on_config_change: callable | None = None
 
+# Callback fired when visualEnabled changes (for future live toggle support)
+_on_visual_enabled_change: callable | None = None
+
 DEFAULT_CONFIG = {
     "baseUrl": "",
     "model": "",
@@ -109,6 +112,16 @@ def set_config_change_callback(cb: callable | None) -> None:
     """
     global _on_config_change  # noqa: PLW0603
     _on_config_change = cb
+
+
+def set_visual_enabled_callback(cb: callable | None) -> None:
+    """Register a callback invoked when visualEnabled changes via API.
+
+    Called after persist with the new boolean value so runtime can
+    start/stop the visual orchestrator live. Stub for future use.
+    """
+    global _on_visual_enabled_change  # noqa: PLW0603
+    _on_visual_enabled_change = cb
 
 
 def _read_ui_config() -> dict[str, object]:
@@ -197,6 +210,14 @@ async def post_config(request: web.Request) -> web.Response:
         ui_config["voice_mode"] = body["voiceMode"]
         _write_ui_config(ui_config)
 
+    # persist visualEnabled to ui_settings.json for runtime loop
+    if "visualEnabled" in body:
+        ui_config = _read_ui_config()
+        ui_config["visual_enabled"] = body["visualEnabled"]
+        _write_ui_config(ui_config)
+        if _on_visual_enabled_change is not None:
+            _on_visual_enabled_change(body["visualEnabled"])
+
     safe = {k: v for k, v in existing.items() if k != "apiKey"}
     _log.info("Config saved: %s", safe)
     return web.json_response(existing)
@@ -260,14 +281,58 @@ async def post_voice_toggle(request: web.Request) -> web.Response:
     return web.json_response({"voice_enabled": enabled})
 
 
+# ── Visual control handlers ──────────────────────────────
+
+async def get_visual_status(request: web.Request) -> web.Response:
+    ui_config = _read_ui_config()
+    visual_enabled = ui_config.get("visual_enabled", True)
+    return web.json_response({
+        "visual_enabled": visual_enabled,
+    })
+
+
+async def post_visual_toggle(request: web.Request) -> web.Response:
+    try:
+        data: dict[str, object] = await request.json()
+    except Exception:
+        return web.json_response(
+            {"error": "Invalid JSON body", "trace_id": _new_trace_id()},
+            status=400,
+        )
+
+    enabled = data.get("enabled")
+    if enabled is None:
+        ui_config = _read_ui_config()
+        enabled = not ui_config.get("visual_enabled", True)
+
+    # Persist to both config files for consistency
+    srv_config = _load_config()
+    srv_config["visualEnabled"] = enabled
+    _save_config(srv_config)
+
+    ui_config = _read_ui_config()
+    ui_config["visual_enabled"] = enabled
+    _write_ui_config(ui_config)
+
+    if _on_visual_enabled_change is not None:
+        _on_visual_enabled_change(enabled)
+
+    _log.info("Visual toggle via API: enabled=%s", enabled)
+    return web.json_response({"visual_enabled": enabled})
+
+
 async def get_status(request: web.Request) -> web.Response:
     tts_ok = _module_available("cosyvoice")
     l2d_ok = _module_available("live2d")
     backend_running = True
 
-    # Include voice state in the status response
+    # Include voice and visual state in the status response
+    ui_config = _read_ui_config()
     voice_state = {
         "voice_enabled": _voice_pipeline_ref.voice_enabled if _voice_pipeline_ref is not None else False,
+    }
+    visual_state = {
+        "visual_enabled": ui_config.get("visual_enabled", True),
     }
 
     return web.json_response({
@@ -277,6 +342,7 @@ async def get_status(request: web.Request) -> web.Response:
         "l2d_status": "running" if l2d_ok else "stopped",
         "tts": "running" if tts_ok else "stopped",
         **voice_state,
+        **visual_state,
     })
 
 
@@ -339,11 +405,14 @@ def create_app() -> web.Application:
     app.router.add_get("/api/ping", get_ping)  # v5.x: health check endpoint
     app.router.add_get("/api/voice/status", get_voice_status)
     app.router.add_post("/api/voice/toggle", post_voice_toggle)
+    app.router.add_get("/api/visual/status", get_visual_status)
+    app.router.add_post("/api/visual/toggle", post_visual_toggle)
     # Catch-all for graceful 404 on unknown routes
     app.router.add_route("*", "/{tail:.*}", handle_404)
     _log.info(
         "Routes registered: GET|POST /api/config, GET /api/status, "
-        "GET /api/ping, GET /api/voice/status, POST /api/voice/toggle"
+        "GET /api/ping, GET /api/voice/status, POST /api/voice/toggle, "
+        "GET /api/visual/status, POST /api/visual/toggle"
     )
     return app
 

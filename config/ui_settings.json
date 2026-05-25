@@ -1,5 +1,1 @@
-{
-  "voice_mode": "asr",
-  "visual_enabled": true,
-  "model": ""
-}
+{"visual_enabled": false}

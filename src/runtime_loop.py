@@ -178,8 +178,8 @@ async def run_voice_loop(
         timeout: Max runtime in seconds (0 = run until stop_event).
         stop_event: External asyncio.Event for coordinated shutdown.
                     If None, SIGINT/SIGTERM will be handled internally.
-        voice_mode: "asr" for microphone → ASR pipeline, "text" for stdin keyboard input.
-                    When "text", reads from config/ui_settings.json voice_mode field.
+        voice_mode: "asr" for microphone → ASR pipeline, "text" for /api/chat queue input.
+                    When "text", reads from /tmp/openheart_chat_queue.jsonl written by /api/chat.
     """
     # Ensure CosyVoice monkeypatch is applied
     _ensure_cosyvoice_patched()
@@ -849,6 +849,51 @@ async def run_voice_loop(
     if _l2d_server._clients:
         print("[L2D] Avatar connected — lip-sync active", flush=True)
 
+    # ── Chat queue helpers — v4.5.0 §0.6 ───────────────────────────
+
+    async def _poll_chat_queue() -> str | None:
+        """Read one entry from /tmp/openheart_chat_queue.jsonl. Returns text or None."""
+        chat_queue_path = Path("/tmp/openheart_chat_queue.jsonl")
+        if not chat_queue_path.exists():
+            return None
+        try:
+            with open(chat_queue_path, "r", encoding="utf-8") as _qf:
+                lines = _qf.readlines()
+            # Clear file after reading to prevent reprocessing
+            with open(chat_queue_path, "w", encoding="utf-8") as _qf:
+                _qf.write("")
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    candidate = entry.get("text", "")
+                except json.JSONDecodeError:
+                    continue
+                if candidate:
+                    return candidate
+        except Exception as exc:
+            logger.warning(
+                "Failed to read chat queue. trace_id=%s error=%s",
+                uuid.uuid4().hex[:12], exc,
+            )
+        return None
+
+    async def _handle_chat_text(text: str) -> None:
+        """Process received chat text — transcript, L2D, shared ctx, state updates."""
+        print(f"\n🎤 {text}")
+        if _transcript is not None:
+            _transcript.add_user_message(text)
+        _l2d_server.send_subtitle("user", text)
+        _transcript_initialized = False
+        shared_ctx.set(NS_PERCEPTION, "last_asr_text", text)
+        shared_ctx.set(NS_PERCEPTION, "last_asr_ts", datetime.now(timezone.utc).isoformat())
+        if _proactive is not None:
+            _proactive.notify_user_speech()
+        _state["speech_active"] = False
+        _state["t1_api"] = time.perf_counter()
+
     # ── 6. Main loop ───────────────────────────────────────────────
     try:
         while stop_event is None or not stop_event.is_set():
@@ -857,37 +902,36 @@ async def run_voice_loop(
                 logger.info("Timeout (%.0fs) reached — stopping.", timeout)
                 break
 
-            # ── Input: ASR (mic) or text (stdin) — v4.5.0 §0.6 ──────────
+            # ── Input: ASR (mic) or text (queue) — v4.5.0 §0.6 ──────────
             if voice_mode == "text":
-                # Text mode: read from stdin instead of microphone ASR
-                print("\n[键盘] 请输入:", end=" ", flush=True)
-                _loop = asyncio.get_running_loop()
-                _raw_input = await _loop.run_in_executor(None, sys.stdin.readline)
-                text = _raw_input.strip()
+                text = None
+                for _ in range(50):
+                    await asyncio.sleep(0.2)
+                    text = await _poll_chat_queue()
+                    if text:
+                        break
                 if not text:
                     continue
                 if text.lower() in ("quit", "exit", "q"):
                     logger.info("[键盘] 用户退出.")
                     break
                 _emotion = "neutral"
-                print(f"\n🎤 {text}")
-                if _transcript is not None:
-                    _transcript.add_user_message(text)
-                _l2d_server.send_subtitle("user", text)
-                _transcript_initialized = False
-                # v4.5.0 §5 — SharedContext: record event for persistence
-                shared_ctx.set(NS_PERCEPTION, "last_asr_text", text)
-                shared_ctx.set(NS_PERCEPTION, "last_asr_ts", datetime.now(timezone.utc).isoformat())
-                if _proactive is not None:
-                    _proactive.notify_user_speech()
-                _state["speech_active"] = False
-                _state["t1_api"] = time.perf_counter()
+                await _handle_chat_text(text)
             else:
                 # ASR mode: VAD-based utterance accumulation — buffer speech until silence timeout
-                # v4.5.0 §0.6 — skip if voice pipeline is paused
+                # v4.5.0 §0.6 — if voice pipeline is paused, poll chat queue for text input
                 if not _voice.voice_enabled:
-                    await asyncio.sleep(0.2)
-                    continue
+                    text = await _poll_chat_queue()
+                    if text:
+                        if text.lower() in ("quit", "exit", "q"):
+                            logger.info("[键盘] 用户退出.")
+                            break
+                        _emotion = "neutral"
+                        await _handle_chat_text(text)
+                        # fall through to LLM processing
+                    else:
+                        await asyncio.sleep(0.2)
+                        continue
                 raw_audio = await _voice.get_audio_chunk()
                 if not raw_audio:
                     logger.warning("parec stream ended — stopping.")

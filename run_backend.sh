@@ -28,7 +28,7 @@ print('DEEPSEEK API OK')
 
 # Start REST API in background (non-critical, ignore errors)
 echo "=== Starting REST API on port 8081 ==="
-python frontend/server.py > /tmp/openheart_api.log 2>&1 &
+python frontend/server.py --port 8081 > /tmp/openheart_api.log 2>&1 &
 API_PID=$!
 sleep 1
 
