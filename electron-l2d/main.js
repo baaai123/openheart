@@ -519,6 +519,20 @@ ipcMain.handle('start-backend', async () => {
   });
 });
 
+// stop-backend: kills the backend process via WSL pkill + local process
+ipcMain.on('stop-backend', () => {
+  console.log('[Config] Stop backend requested');
+  const { exec } = require('child_process');
+  exec('wsl pkill -f demo_full.py', (err) => {
+    if (err) console.warn('[Backend] pkill failed:', err.message);
+  });
+  if (backendProcess) {
+    backendProcess.kill();
+    backendProcess = null;
+  }
+  sendConfigEvent('backend-status', 'stopped');
+});
+
 // stop-l2d: closes the Live2D render window
 ipcMain.on('stop-l2d', () => {
   console.log('[IPC] stop-l2d requested');

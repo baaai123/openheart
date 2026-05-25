@@ -94,6 +94,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ---- Backend control (v4.5.0 §13) ----
   startBackend: () => ipcRenderer.invoke('start-backend'),
 
+  stopBackend: () => ipcRenderer.send('stop-backend'),
+
   onBackendStatus: (callback) => {
     ipcRenderer.on('backend-status', (_event, state) => callback(state));
   },

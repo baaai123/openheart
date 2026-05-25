@@ -12,7 +12,13 @@
   }
 
   // ---- Constants ----
-  const BACKEND_API_BASE = 'http://localhost:8081';
+  // v5.x: API server runs on port 8082 (see api_server.py OPENMATE_API_PORT)
+  // Fallback ports for dev setups where the port may differ
+  var _activeBackendBase = null; // cached after successful probe
+  var _activeBackendPort = null;
+  var _statusPollUrl = null; // track last attempted URL for error display
+
+  const BACKEND_PORTS = [8082, 8081, 9876, 8000];
   const STATUS_POLL_INTERVAL = 3000; // ms
   const LOCAL_STORAGE_KEY = 'openheart_config';
 
@@ -21,7 +27,7 @@
   function byId(id) { return document.getElementById(id); }
 
   function toast(msg) {
-    const el = byId('toast');
+    var el = byId('toast');
     if (!el) return;
     el.textContent = msg;
     el.classList.add('show');
@@ -42,14 +48,121 @@
     return el ? el.classList.contains('active') : false;
   }
 
+  // ---- Backend discovery / port fallback ----
+
+  function backendBaseUrl() {
+    // Return cached active base if we found a working backend
+    if (_activeBackendBase) return _activeBackendBase;
+    // Otherwise use the primary port
+    return 'http://localhost:' + BACKEND_PORTS[0];
+  }
+
+  function backendBaseForPort(port) {
+    return 'http://localhost:' + port;
+  }
+
+  // Probe /api/ping on a specific port — returns the base URL if reachable, null otherwise
+  async function _probePort(port, signal) {
+    var base = backendBaseForPort(port);
+    var url = base + '/api/ping';
+    _statusPollUrl = url;
+    console.log('[config] Probing backend at', url);
+    try {
+      var res = await fetch(url, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        signal: signal
+      });
+      if (res.ok) {
+        var body = await res.json();
+        if (body && body.status === 'ok') {
+          console.log('[config] Backend found at', base, '—', JSON.stringify(body));
+          return base;
+        }
+      }
+    } catch (err) {
+      // Port unreachable or timeout — expected for fallback probing
+      console.log('[config] No response from', url, err.message);
+    }
+    return null;
+  }
+
+  // Find a running backend by trying each port in BACKEND_PORTS
+  async function _discoverBackend(timeoutMs) {
+    timeoutMs = timeoutMs || 1500;
+    for (var i = 0; i < BACKEND_PORTS.length; i++) {
+      var port = BACKEND_PORTS[i];
+      // Use AbortController for per-port timeout
+      var controller = new AbortController();
+      var timer = setTimeout(function () { controller.abort(); }, timeoutMs);
+      try {
+        var base = await _probePort(port, controller.signal);
+        if (base) {
+          _activeBackendBase = base;
+          _activeBackendPort = port;
+          return base;
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    console.warn('[config] No backend found on any port:', BACKEND_PORTS.join(', '));
+    return null;
+  }
+
   // ---- HTTP helpers ----
 
   function apiUrl(path) {
-    return BACKEND_API_BASE + path;
+    return backendBaseUrl() + path;
   }
 
+  // Enhanced apiFetch with fallback: tries primary port first, then fallback ports
   async function apiFetch(path, options) {
-    var url = apiUrl(path);
+    var primaryBase = backendBaseUrl();
+    var portsToTry = _activeBackendBase
+      ? null // already discovered — use cached base
+      : BACKEND_PORTS;
+    var lastErr = null;
+
+    if (portsToTry) {
+      // Try each port until one works
+      for (var i = 0; i < portsToTry.length; i++) {
+        var port = portsToTry[i];
+        var base = backendBaseForPort(port);
+        var url = base + path;
+        _statusPollUrl = url;
+        console.log('[config] apiFetch trying', url);
+        try {
+          var opts = options ? Object.assign({}, options) : {};
+          opts.headers = opts.headers || {};
+          opts.headers['Content-Type'] = 'application/json';
+          var res = await fetch(url, opts);
+          if (!res.ok) {
+            var body;
+            try { body = await res.text(); } catch (_) { body = ''; }
+            throw new Error('API ' + res.status + ' ' + res.statusText + (body ? ': ' + body : ''));
+          }
+          // Cache this as the active backend
+          _activeBackendBase = base;
+          _activeBackendPort = port;
+          console.log('[config] apiFetch succeeded on', url, '— caching', base);
+          // 204 No Content → no body
+          if (res.status === 204) return null;
+          return res.json();
+        } catch (err) {
+          lastErr = err;
+          console.log('[config] apiFetch failed on', url, '—', err.message);
+        }
+      }
+      // All ports failed
+      console.warn('[config] apiFetch: all ports failed for', path, lastErr);
+      throw lastErr || new Error('Backend unreachable on all ports');
+    }
+
+    // Already have an active backend — use it directly
+    var url = primaryBase + path;
+    _statusPollUrl = url;
+    console.log('[config] apiFetch using cached base', primaryBase, 'for', path);
     var opts = options || {};
     opts.headers = opts.headers || {};
     opts.headers['Content-Type'] = 'application/json';
@@ -59,7 +172,6 @@
       try { body = await res.text(); } catch (_) { body = ''; }
       throw new Error('API ' + res.status + ' ' + res.statusText + (body ? ': ' + body : ''));
     }
-    // 204 No Content → no body
     if (res.status === 204) return null;
     return res.json();
   }
@@ -223,20 +335,28 @@
   }
 
   function updateBackendStatus(state) {
-    var textEl = byId('status-backend-text');
-    if (!textEl) return;
+    var ids = [
+      { dot: 'status-backend-dot', text: 'status-backend-text' },   // L2D Server row
+      { dot: 'status-ai-backend-dot', text: 'status-ai-backend-text' }  // AI Backend row
+    ];
+    var dotColor, label;
     switch (state) {
       case 'running':
-        setDotColor('status-backend-dot', 'green');
-        textEl.textContent = 'Running';
+        dotColor = 'green';
+        label = 'Running';
         break;
       case 'starting':
-        setDotColor('status-backend-dot', 'yellow');
-        textEl.textContent = 'Starting...';
+        dotColor = 'yellow';
+        label = 'Starting...';
         break;
       default:
-        setDotColor('status-backend-dot', 'red');
-        textEl.textContent = 'Offline';
+        dotColor = 'red';
+        label = 'Offline';
+    }
+    for (var i = 0; i < ids.length; i++) {
+      setDotColor(ids[i].dot, dotColor);
+      var el = byId(ids[i].text);
+      if (el) el.textContent = label;
     }
   }
 
@@ -284,7 +404,7 @@
     try {
       var status = await apiFetch('/api/status');
 
-      // Backend (L2D WebSocket) status — accept 'backend' or 'status' field
+      // Backend status — accept 'backend' or 'status' field
       var backendState = status.backend || status.status || 'offline';
       updateBackendStatus(backendState);
 
@@ -293,6 +413,20 @@
       if (l2dState !== undefined) {
         updateL2DStatus(l2dState);
       }
+    } catch (err) {
+      // Backend unreachable → both offline
+      // Show the attempted URL in the error message so user can debug connectivity
+      var attemptedUrl = _statusPollUrl || backendBaseUrl() + '/api/status';
+      console.warn('[config] Backend status poll failed —', attemptedUrl, err.message);
+      updateBackendStatus('offline');
+      updateL2DStatus('offline');
+      // Set a tooltip with the actual URL being polled for debugging
+      var statusEl = byId('status-backend-text');
+      if (statusEl) {
+        statusEl.title = 'Trying: ' + attemptedUrl + '\nError: ' + err.message;
+      }
+    }
+  }
     } catch (err) {
       // Backend unreachable → both offline
       updateBackendStatus('offline');
@@ -496,6 +630,30 @@
     });
   }
 
+  // ---- Stop Backend ----
+
+  function initStopButton() {
+    byId('btn-stop').addEventListener('click', async function () {
+      var btn = this;
+      btn.disabled = true;
+
+      updateProgress('STOPPED', 0);
+      var log = byId('startup-log');
+      if (log) log.textContent = 'STOPPED';
+      setDotColor('status-ai-backend-dot', 'red');
+      setDotColor('status-backend-dot', 'red');
+
+      if (api.stopBackend) {
+        api.stopBackend();
+        toast('Stopping backend...');
+      } else {
+        toast('Stop API not available');
+      }
+
+      btn.disabled = false;
+    });
+  }
+
   // ---- Init ----
 
   function init() {
@@ -503,6 +661,7 @@
     initInputs();
     initChat();
     initStartButton();
+    initStopButton();
     initShowTerminalButton();
     startStatusPolling();
 

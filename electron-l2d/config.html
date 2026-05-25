@@ -232,6 +232,30 @@ textarea:focus {
   border-radius: var(--radius);
 }
 
+/* ── Stop button (big, red) ── */
+.stop-btn {
+  width: 100%;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: .5px;
+  border-radius: var(--radius);
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+  margin-top: 8px;
+  cursor: pointer;
+  transition: background .2s, border-color .2s;
+}
+.stop-btn:hover {
+  background: #ff3366;
+  border-color: #ff3366;
+}
+.stop-btn:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
 /* ── Progress bar ── */
 .progress-bar {
   width: 100%;
@@ -434,8 +458,9 @@ textarea:focus {
     </div>
   </div>
 
-  <!-- ── START BACKEND ── -->
+  <!-- ── START / STOP ── -->
   <button class="btn primary start-btn" id="btn-start">▶ START ALL</button>
+  <button class="stop-btn" id="btn-stop">⏹ STOP</button>
 
   <!-- ── Progress ── -->
   <div class="progress-bar">
