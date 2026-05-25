@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>OpenHeart Control Panel</title>
+<title>OpenHeart Backend Config</title>
 <style>
 :root {
   --bg: #0d0d15;
@@ -88,7 +88,7 @@ header h1 { font-size: 14px; font-weight: 600; }
 }
 .field:last-child { margin-bottom: 0; }
 .field label {
-  width: 50px;
+  width: 60px;
   font-size: 12px;
   color: var(--text2);
   flex-shrink: 0;
@@ -114,6 +114,26 @@ header h1 { font-size: 14px; font-weight: 600; }
 .field input:disabled {
   opacity: .5;
   cursor: not-allowed;
+}
+
+/* ── Textarea ── */
+textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface2);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 12px;
+  outline: none;
+  resize: vertical;
+  transition: border-color .2s;
+}
+textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-glow);
 }
 
 /* ── Toggle switch ── */
@@ -145,6 +165,30 @@ header h1 { font-size: 14px; font-weight: 600; }
   background: #fff;
 }
 
+/* ── Status dots ── */
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.status-row:last-child { margin-bottom: 0; }
+.status-label {
+  width: 70px;
+  font-size: 12px;
+  color: var(--text2);
+}
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-dot.green { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,.5); }
+.status-dot.red { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,.5); }
+.status-dot.yellow { background: #eab308; box-shadow: 0 0 6px rgba(234,179,8,.5); }
+.status-text { font-size: 12px; color: var(--text2); }
+
 /* ── Buttons ── */
 .btn {
   padding: 6px 14px;
@@ -161,6 +205,14 @@ header h1 { font-size: 14px; font-weight: 600; }
   border-color: var(--primary);
   background: var(--primary-glow);
 }
+.btn:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+.btn:disabled:hover {
+  border-color: var(--border);
+  background: var(--surface2);
+}
 .btn.primary {
   background: var(--primary);
   border-color: var(--primary);
@@ -169,46 +221,39 @@ header h1 { font-size: 14px; font-weight: 600; }
 .btn.primary:hover {
   background: #7c6ff0;
 }
-.btn-row {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-top: 4px;
+
+/* ── Start button (big) ── */
+.start-btn {
+  width: 100%;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: .5px;
+  border-radius: var(--radius);
 }
 
-/* ── Expression buttons ── */
-.expr-btn {
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+/* ── Progress bar ── */
+.progress-bar {
+  width: 100%;
+  height: 6px;
   background: var(--surface2);
-  color: var(--text2);
-  font-family: var(--font);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  border-radius: 3px;
+  transition: width .4s ease;
+}
+.progress-text {
   font-size: 11px;
-  cursor: pointer;
-  transition: .2s;
+  color: var(--muted);
+  margin-top: 4px;
+  text-align: center;
 }
-.expr-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: rgba(0, 212, 170, .1);
-}
-
-/* ── Info / note ── */
-.note {
-  font-size: 11px;
-  color: var(--warn);
-  margin-top: 6px;
-  line-height: 1.4;
-}
-.info-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  padding: 4px 0;
-}
-.info-row .lbl { color: var(--text2); }
-.info-row .val { color: var(--muted); font-family: var(--mono); font-size: 11px; }
 
 /* ── Toast ── */
 #toast {
@@ -237,78 +282,74 @@ header h1 { font-size: 14px; font-weight: 600; }
 
 <header>
   <div class="logo">O</div>
-  <h1>Control Panel</h1>
+  <h1>OpenHeart Backend Config</h1>
 </header>
 
 <div class="scroll">
 
-  <!-- ── Connection ── -->
+  <!-- ── API Config ── -->
   <div class="section">
-    <div class="section-title">Connection</div>
+    <div class="section-title">API Config</div>
     <div class="field">
-      <label>Host</label>
-      <input type="text" id="ws-host" placeholder="localhost">
+      <label>Base URL</label>
+      <input type="text" id="api-baseurl" placeholder="http://localhost:8000">
     </div>
     <div class="field">
-      <label>Port</label>
-      <input type="number" id="ws-port" placeholder="9876" min="1" max="65535">
+      <label>Model</label>
+      <input type="text" id="api-model" placeholder="gpt-4o">
     </div>
-    <div class="btn-row">
-      <button class="btn primary" id="btn-reconnect">Reconnect</button>
-      <span id="ws-status" style="font-size:11px;color:var(--muted);align-self:center">unknown</span>
+    <div class="field">
+      <label>API Key</label>
+      <input type="password" id="api-key" placeholder="sk-...">
     </div>
   </div>
 
-  <!-- ── Display ── -->
+  <!-- ── Persona ── -->
   <div class="section">
-    <div class="section-title">Display</div>
+    <div class="section-title">Persona</div>
+    <textarea id="persona-prompt" placeholder="Enter system prompt for the AI assistant..."></textarea>
+  </div>
+
+  <!-- ── Module Switches ── -->
+  <div class="section">
+    <div class="section-title">Modules</div>
     <div class="field">
-      <label>Width</label>
-      <input type="number" id="disp-width" min="200" max="3840">
+      <label>Voice</label>
+      <div class="toggle active" id="tog-voice"></div>
     </div>
     <div class="field">
-      <label>Height</label>
-      <input type="number" id="disp-height" min="200" max="2160">
+      <label>Visual</label>
+      <div class="toggle active" id="tog-visual"></div>
     </div>
     <div class="field">
-      <label>On Top</label>
-      <div class="toggle active" id="tog-atop"></div>
-    </div>
-    <div class="field">
-      <label>Click Thru</label>
-      <div class="toggle active" id="tog-clickthru"></div>
-    </div>
-    <div class="field">
-      <label>DevTools</label>
-      <div class="toggle" id="tog-devtools"></div>
+      <label>L2D</label>
+      <div class="toggle active" id="tog-l2d"></div>
     </div>
   </div>
 
-  <!-- ── Model ── -->
+  <!-- ── Status Panel ── -->
   <div class="section">
-    <div class="section-title">Model</div>
-    <div class="field">
-      <label>Path</label>
-      <input type="text" id="model-path" disabled>
+    <div class="section-title">Status</div>
+    <div class="status-row">
+      <span class="status-label">Backend</span>
+      <span class="status-dot red" id="status-backend-dot"></span>
+      <span class="status-text" id="status-backend-text">Offline</span>
     </div>
-    <div class="note">Changes to model path require app restart.</div>
-    <div style="margin-top:8px;font-size:12px;color:var(--text2);margin-bottom:4px">Test Expression:</div>
-    <div class="btn-row">
-      <button class="expr-btn" data-expr="smile">😊 smile</button>
-      <button class="expr-btn" data-expr="sad">😢 sad</button>
-      <button class="expr-btn" data-expr="neutral">😐 neutral</button>
-      <button class="expr-btn" data-expr="surprised">😲 surprised</button>
-      <button class="expr-btn" data-expr="blush">😳 blush</button>
+    <div class="status-row">
+      <span class="status-label">L2D</span>
+      <span class="status-dot red" id="status-l2d-dot"></span>
+      <span class="status-text" id="status-l2d-text">Offline</span>
     </div>
   </div>
 
-  <!-- ── About ── -->
-  <div class="section">
-    <div class="section-title">About</div>
-    <div class="info-row"><span class="lbl">App</span><span class="val">OpenHeart v4.5.0</span></div>
-    <div class="info-row"><span class="lbl">Client</span><span class="val">Electron L2D</span></div>
-    <div class="info-row"><span class="lbl">Model</span><span class="val" id="about-model">xiaoyue</span></div>
+  <!-- ── START BACKEND ── -->
+  <button class="btn primary start-btn" id="btn-start">▶ START BACKEND</button>
+
+  <!-- ── Progress ── -->
+  <div class="progress-bar">
+    <div class="progress-fill" id="progress-fill"></div>
   </div>
+  <div class="progress-text" id="progress-text">Ready</div>
 
 </div>
 

@@ -1,5 +1,5 @@
-// config_renderer.js — Control panel renderer logic
-// v4.5.0 §7.3.4 — Runs in config window (Electron renderer, browser context)
+// config_renderer.js — OpenHeart backend config panel renderer
+// v4.5.0 §13 — Runs in config window (Electron renderer, browser context)
 // IPC via window.electronAPI (exposed by preload.js with contextIsolation:true)
 
 (function () {
@@ -22,30 +22,6 @@
     el.classList.add('show');
     clearTimeout(el._hide);
     el._hide = setTimeout(() => el.classList.remove('show'), 2000);
-  }
-
-  // ---- Populate fields from config ----
-
-  async function loadSettings() {
-    let cfg;
-    try {
-      cfg = await api.loadConfig();
-    } catch (err) {
-      console.warn('[config] loadConfig failed:', err);
-      toast('Failed to load settings');
-      return;
-    }
-    if (!cfg) return;
-
-    byId('ws-host').value = cfg.wsHost || 'localhost';
-    byId('ws-port').value = cfg.wsPort || 9876;
-    byId('disp-width').value = cfg.width || 500;
-    byId('disp-height').value = cfg.height || 900;
-    byId('model-path').value = cfg.modelPath || './models/xiaoyue/xiaoyue.model3.json';
-
-    setToggle('tog-atop', !!cfg.alwaysOnTop);
-    setToggle('tog-clickthru', !!cfg.clickThrough);
-    setToggle('tog-devtools', !!cfg.devTools);
   }
 
   // ---- Toggle helpers ----
@@ -82,68 +58,165 @@
     }, delayMs);
   }
 
+  // ---- Populate fields from config ----
+
+  async function loadSettings() {
+    let cfg;
+    try {
+      cfg = await api.loadConfig();
+    } catch (err) {
+      console.warn('[config] loadConfig failed:', err);
+      toast('Failed to load settings');
+      return;
+    }
+    if (!cfg) return;
+
+    // API Config
+    byId('api-baseurl').value = cfg.baseUrl || '';
+    byId('api-model').value = cfg.model || '';
+    byId('api-key').value = cfg.apiKey || '';
+
+    // Persona
+    byId('persona-prompt').value = cfg.systemPrompt || '';
+
+    // Module switches (default on)
+    setToggle('tog-voice', cfg.voiceEnabled !== false);
+    setToggle('tog-visual', cfg.visualEnabled !== false);
+    setToggle('tog-l2d', cfg.l2dEnabled !== false);
+  }
+
+  // ---- Progress bar ----
+
+  function updateProgress(text, percent) {
+    const fill = byId('progress-fill');
+    const label = byId('progress-text');
+    if (fill) fill.style.width = Math.min(100, Math.max(0, percent)) + '%';
+    if (label) label.textContent = text;
+  }
+
+  // ---- Status dots ----
+
+  function setDotColor(id, color) {
+    const el = byId(id);
+    if (!el) return;
+    el.className = 'status-dot ' + color;
+  }
+
+  function updateBackendStatus(state) {
+    const textEl = byId('status-backend-text');
+    if (!textEl) return;
+    switch (state) {
+      case 'running':
+        setDotColor('status-backend-dot', 'green');
+        textEl.textContent = 'Running';
+        break;
+      case 'starting':
+        setDotColor('status-backend-dot', 'yellow');
+        textEl.textContent = 'Starting...';
+        break;
+      default:
+        setDotColor('status-backend-dot', 'red');
+        textEl.textContent = 'Offline';
+    }
+  }
+
+  function updateL2DStatus(state) {
+    const textEl = byId('status-l2d-text');
+    if (!textEl) return;
+    switch (state) {
+      case 'running':
+        setDotColor('status-l2d-dot', 'green');
+        textEl.textContent = 'Running';
+        break;
+      case 'starting':
+        setDotColor('status-l2d-dot', 'yellow');
+        textEl.textContent = 'Starting...';
+        break;
+      default:
+        setDotColor('status-l2d-dot', 'red');
+        textEl.textContent = 'Offline';
+    }
+  }
+
   // ---- Wire up inputs ----
 
   function initInputs() {
-    // Connection inputs
-    byId('ws-host').addEventListener('input', function () {
-      debouncedSave('wsHost', this.value);
+    // API Config
+    byId('api-baseurl').addEventListener('input', function () {
+      debouncedSave('baseUrl', this.value);
     });
-    byId('ws-port').addEventListener('input', function () {
-      debouncedSave('wsPort', parseInt(this.value, 10) || 9876);
+    byId('api-model').addEventListener('input', function () {
+      debouncedSave('model', this.value);
+    });
+    byId('api-key').addEventListener('input', function () {
+      debouncedSave('apiKey', this.value);
     });
 
-    // Display inputs
-    byId('disp-width').addEventListener('input', function () {
-      debouncedSave('width', parseInt(this.value, 10) || 500);
-    });
-    byId('disp-height').addEventListener('input', function () {
-      debouncedSave('height', parseInt(this.value, 10) || 900);
+    // Persona
+    byId('persona-prompt').addEventListener('input', function () {
+      debouncedSave('systemPrompt', this.value);
     });
 
     // Toggle switches
-    byId('tog-atop').addEventListener('click', function () {
+    byId('tog-voice').addEventListener('click', function () {
       this.classList.toggle('active');
-      saveField('alwaysOnTop', this.classList.contains('active'));
+      saveField('voiceEnabled', this.classList.contains('active'));
     });
-    byId('tog-clickthru').addEventListener('click', function () {
+    byId('tog-visual').addEventListener('click', function () {
       this.classList.toggle('active');
-      saveField('clickThrough', this.classList.contains('active'));
+      saveField('visualEnabled', this.classList.contains('active'));
     });
-    byId('tog-devtools').addEventListener('click', function () {
+    byId('tog-l2d').addEventListener('click', function () {
       this.classList.toggle('active');
-      saveField('devTools', this.classList.contains('active'));
+      saveField('l2dEnabled', this.classList.contains('active'));
     });
   }
 
-  // ---- Expression buttons ----
+  // ---- Start Backend button ----
 
-  function initExpressionButtons() {
-    document.querySelectorAll('.expr-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var name = this.getAttribute('data-expr');
-        if (!name) return;
-        api.sendExpression(name).catch(function (err) {
-          console.warn('[config] sendExpression failed:', err);
-        });
-        toast('Expression: ' + name);
+  function initStartButton() {
+    byId('btn-start').addEventListener('click', function () {
+      const btn = this;
+      btn.disabled = true;
+      btn.textContent = '⟳ Starting...';
+      updateProgress('Initializing...', 10);
+
+      api.startBackend().then(function (result) {
+        toast('Backend started');
+        updateProgress('Running', 100);
+        updateBackendStatus('running');
+        updateL2DStatus('running');
+        btn.textContent = '✓ BACKEND RUNNING';
+      }).catch(function (err) {
+        console.warn('[config] startBackend failed:', err);
+        toast('Failed to start backend');
+        updateProgress('Failed', 0);
+        updateBackendStatus('stopped');
+        updateL2DStatus('stopped');
+        btn.disabled = false;
+        btn.textContent = '▶ START BACKEND';
       });
     });
   }
 
-  // ---- Reconnect button ----
+  // ---- IPC status / progress listeners ----
 
-  function initReconnectButton() {
-    byId('btn-reconnect').addEventListener('click', function () {
-      var host = byId('ws-host').value.trim() || 'localhost';
-      var port = parseInt(byId('ws-port').value, 10) || 9876;
-      saveField('wsHost', host);
-      saveField('wsPort', port);
-      api.reconnectWs().catch(function (err) {
-        console.warn('[config] reconnectWs failed:', err);
+  function initStatusListeners() {
+    if (api.onBackendStatus) {
+      api.onBackendStatus(function (state) {
+        updateBackendStatus(state);
       });
-      toast('Reconnecting to ' + host + ':' + port);
-    });
+    }
+    if (api.onL2DStatus) {
+      api.onL2DStatus(function (state) {
+        updateL2DStatus(state);
+      });
+    }
+    if (api.onBackendProgress) {
+      api.onBackendProgress(function (data) {
+        updateProgress(data.text || '', data.percent || 0);
+      });
+    }
   }
 
   // ---- Init ----
@@ -151,8 +224,8 @@
   function init() {
     loadSettings();
     initInputs();
-    initExpressionButtons();
-    initReconnectButton();
+    initStartButton();
+    initStatusListeners();
   }
 
   if (document.readyState === 'loading') {

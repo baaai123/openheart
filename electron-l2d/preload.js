@@ -85,4 +85,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   sendExpression: (name) => ipcRenderer.send('send-expression', name),
 
   reconnectWs: () => ipcRenderer.send('reconnect-ws'),
+
+  // ---- Backend control (v4.5.0 §13) ----
+  startBackend: () => ipcRenderer.invoke('start-backend'),
+
+  onBackendStatus: (callback) => {
+    ipcRenderer.on('backend-status', (_event, state) => callback(state));
+  },
+
+  onL2DStatus: (callback) => {
+    ipcRenderer.on('l2d-status', (_event, state) => callback(state));
+  },
+
+  onBackendProgress: (callback) => {
+    ipcRenderer.on('backend-progress', (_event, data) => callback(data));
+  },
 });

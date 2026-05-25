@@ -7,6 +7,8 @@ app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('disable-gpu-sandbox');
 
 const path = require('path');
+const fs = require('fs');
+const { spawn } = require('child_process');
 const { WebSocket } = require('ws');
 
 const WS_PORT = 9876;
@@ -14,11 +16,61 @@ const WS_HOST = 'localhost';
 const ENABLE_GLOBAL_TRACKING = true;
 const CURSOR_POLL_MS = 33;
 
+// Config file persistence (v4.5.0 §13)
+const CONFIG_FILE = path.join(app.getPath('userData'), 'config.json');
+const CONFIG_DEFAULTS = {
+  wsHost: WS_HOST,
+  wsPort: WS_PORT,
+  width: 500,
+  height: 900,
+  alwaysOnTop: true,
+  clickThrough: true,
+  devTools: false,
+  modelPath: './models/xiaoyue/xiaoyue.model3.json',
+  // OpenHeart backend config
+  baseUrl: '',
+  model: '',
+  apiKey: '',
+  systemPrompt: '',
+  voiceEnabled: true,
+  visualEnabled: true,
+  l2dEnabled: true
+};
+
+function loadConfigFile() {
+  try {
+    const raw = fs.readFileSync(CONFIG_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    // Merge with defaults so missing keys get defaults
+    return { ...CONFIG_DEFAULTS, ...parsed };
+  } catch (err) {
+    // File doesn't exist or is corrupted — use defaults
+    if (err.code !== 'ENOENT') {
+      console.warn('[Config] Failed to read config file:', err.message);
+    }
+    return { ...CONFIG_DEFAULTS };
+  }
+}
+
+function saveConfigFile(cfg) {
+  try {
+    const dir = path.dirname(CONFIG_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf-8');
+    console.log('[Config] Saved to', CONFIG_FILE);
+  } catch (err) {
+    console.warn('[Config] Failed to write config file:', err.message);
+  }
+}
+
 let l2dWindow = null;
 let configWindow = null;
 let ws = null;
 let reconnectTimer = null;
 let cursorInterval = null;
+let backendProcess = null;
 
 function connectWebSocket() {
   if (ws) { try { ws.close(); } catch(e) {} }
@@ -26,6 +78,8 @@ function connectWebSocket() {
   
   ws.on('open', () => {
     console.log('[WS] Connected to Python voice engine');
+    sendConfigEvent('backend-status', 'running');
+    sendConfigEvent('l2d-status', 'running');
     if (l2dWindow && !l2dWindow.isDestroyed()) {
       l2dWindow.webContents.send('model-ready');
     }
@@ -44,11 +98,13 @@ function connectWebSocket() {
 
   ws.on('close', () => {
     console.log('[WS] Disconnected. Reconnecting in 3s...');
+    sendConfigEvent('backend-status', 'stopped');
     reconnectTimer = setTimeout(connectWebSocket, 3000);
   });
 
   ws.on('error', (err) => {
     console.warn('[WS] Error:', err.message);
+    sendConfigEvent('backend-status', 'stopped');
   });
 }
 
@@ -190,19 +246,40 @@ ipcMain.on('ready', () => {
 });
 
 // ---- IPC: Config window handlers ----
-ipcMain.handle('load-config', () => ({
-  wsHost: WS_HOST,
-  wsPort: WS_PORT,
-  width: 500,
-  height: 900,
-  alwaysOnTop: true,
-  clickThrough: true,
-  devTools: false,
-  modelPath: './models/xiaoyue/xiaoyue.model3.json'
-}));
+// Helper: send a message to config window if it exists
+function sendConfigEvent(channel, data) {
+  if (configWindow && !configWindow.isDestroyed()) {
+    configWindow.webContents.send(channel, data);
+  }
+}
+
+// Backend health check polling (v4.5.0 §13)
+let healthCheckInterval = null;
+
+function startHealthCheck() {
+  stopHealthCheck();
+  healthCheckInterval = setInterval(() => {
+    const isWsOpen = ws && ws.readyState === WebSocket.OPEN;
+    sendConfigEvent('backend-status', isWsOpen ? 'running' : 'stopped');
+  }, 5000);
+}
+
+function stopHealthCheck() {
+  if (healthCheckInterval) {
+    clearInterval(healthCheckInterval);
+    healthCheckInterval = null;
+  }
+}
+
+ipcMain.handle('load-config', () => loadConfigFile());
 
 ipcMain.handle('save-config', (_event, { key, value }) => {
   console.log('[Config] Save:', key, '=', value);
+  // Load current config, update key, persist
+  const cfg = loadConfigFile();
+  cfg[key] = value;
+  saveConfigFile(cfg);
+  // Apply real-time effects for L2D window configs
   switch (key) {
     case 'width':
     case 'height':
@@ -229,7 +306,10 @@ ipcMain.handle('save-config', (_event, { key, value }) => {
     case 'wsPort':
       break;
     default:
-      console.warn('[Config] Unknown key:', key);
+      // Backend config keys (baseUrl, model, apiKey, systemPrompt,
+      // voiceEnabled, visualEnabled, l2dEnabled) are persisted to file
+      // but have no real-time Electron window effect — handled when backend starts
+      break;
   }
   return { success: true };
 });
@@ -247,7 +327,72 @@ ipcMain.on('reconnect-ws', () => {
   connectWebSocket();
 });
 
+// ---- Backend control (v4.5.0 §13) ----
 
+ipcMain.handle('start-backend', async () => {
+  console.log('[Config] Start backend requested');
+  sendConfigEvent('backend-status', 'starting');
+  sendConfigEvent('backend-progress', { text: 'Starting backend server...', percent: 30 });
+
+  // If a backend process is already running, kill it first
+  if (backendProcess) {
+    backendProcess.kill();
+    backendProcess = null;
+  }
+
+  return new Promise((resolve, reject) => {
+    // Spawn the Python backend server
+    const serverScript = path.join(__dirname, 'run_server.py');
+    backendProcess = spawn('python3', [serverScript], {
+      cwd: __dirname,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    backendProcess.stdout.on('data', (data) => {
+      const output = data.toString();
+      console.log('[Backend]', output.trim());
+      // Watch for ready signal from backend output
+      if (output.includes('ready') || output.includes('listening') || output.includes('started')) {
+        sendConfigEvent('backend-progress', { text: 'Starting L2D renderer...', percent: 60 });
+        sendConfigEvent('backend-status', 'running');
+      }
+    });
+
+    backendProcess.stderr.on('data', (data) => {
+      console.warn('[Backend]', data.toString().trim());
+    });
+
+    backendProcess.on('error', (err) => {
+      console.error('[Backend] Failed to start:', err.message);
+      stopHealthCheck();
+      sendConfigEvent('backend-status', 'stopped');
+      sendConfigEvent('backend-progress', { text: 'Failed: ' + err.message, percent: 0 });
+      backendProcess = null;
+      reject(err);
+    });
+
+    backendProcess.on('exit', (code) => {
+      console.log('[Backend] Process exited with code', code);
+      if (code !== 0 && code !== null) {
+        stopHealthCheck();
+        sendConfigEvent('backend-status', 'stopped');
+        sendConfigEvent('backend-progress', { text: 'Backend exited (code ' + code + ')', percent: 0 });
+      }
+      backendProcess = null;
+    });
+
+    // Give backend a moment to start, then start L2D connection
+    setTimeout(() => {
+      connectWebSocket();
+      startHealthCheck();
+      sendConfigEvent('l2d-status', 'running');
+      sendConfigEvent('backend-progress', { text: 'Running', percent: 100 });
+      resolve({ success: true });
+    }, 3000);
+  });
+});
+
+app.whenReady().then(() => {
   createWindow();
   createConfigWindow();
   connectWebSocket();
@@ -261,6 +406,11 @@ ipcMain.on('reconnect-ws', () => {
 
 app.on('window-all-closed', () => {
   stopGlobalCursorTracking();
+  stopHealthCheck();
+  if (backendProcess) {
+    backendProcess.kill();
+    backendProcess = null;
+  }
   if (process.platform !== 'darwin') {
     app.quit();
   }

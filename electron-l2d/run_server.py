@@ -9,7 +9,9 @@ async def main():
     server = Live2DServer(port=9876)
     await server.start()
     print("SERVER_READY_9876", flush=True)
-    await asyncio.sleep(90)
+    # Keep running until signaled; use Event for clean shutdown
+    stop_event = asyncio.Event()
+    await stop_event.wait()
     await server.stop()
 
 asyncio.run(main())
