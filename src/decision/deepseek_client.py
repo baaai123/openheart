@@ -443,6 +443,25 @@ class DeepSeekDecision:
         v4.5.0 §T2.5 / §6 — spatial_context is injected as a [空间布局] system message
         providing UI element spatial clustering info.  Silent skip when empty.
         """
+        # ── API key validation (matching decide() pattern at line 186) ─
+        if not self.api_key or not self.api_key.strip().startswith("sk-"):
+            logger.warning(
+                "DeepSeek API key not configured or invalid — returning degraded result."
+            )
+            yield "嗯，我在听呢。", True
+            return
+        # ── base_url validation — guard against config corruption ──────
+        _cleaned_url = self.base_url.strip()
+        if not _cleaned_url.startswith("http"):
+            _cleaned_url = "https://api.deepseek.com/v1"
+            logger.warning(
+                "DeepSeek base_url invalid (%r) — falling back to default",
+                self.base_url,
+            )
+        if _cleaned_url != self.base_url:
+            self.base_url = _cleaned_url
+            self._client = None  # Reset so new client uses corrected URL
+
         async with self._stream_lock:
             messages = [{"role": "system", "content": self.system_prompt}]
             if personality_state:

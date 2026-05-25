@@ -297,9 +297,13 @@ async def run_voice_loop(
 
     # ── 1. VoicePipeline (parec + ASR model) ──────────────────────
     # v4.5.0 §1.4.1 — SenseVoice ASR, v4.5.0 §1.4.2 — parec mic capture
+    # v4.5.0 §0.6 — skip mic/ASR startup entirely in text mode; main loop polls chat queue
     from src.voice_pipeline import VoicePipeline
     _voice = VoicePipeline(config)
-    await _voice.start()
+    if voice_mode != "text":
+        await _voice.start()
+    else:
+        print("TEXT MODE ACTIVE — mic/ASR startup skipped", flush=True)
     asr_model = _voice.model
     _asr_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="asr")
     proc = _voice.proc
@@ -633,7 +637,9 @@ async def run_voice_loop(
 
     # ── 4. Microphone capture managed by VoicePipeline ────────────
     # v4.5.0 §1.4.2 — proc started in VoicePipeline.start()
-    _execution.set_mic_fileno(proc.stdout.fileno())  # type: ignore[union-attr]
+    # v4.5.0 §0.6 — skip mic fileno setup in text mode (proc is None)
+    if voice_mode != "text":
+        _execution.set_mic_fileno(proc.stdout.fileno())  # type: ignore[union-attr]
 
     # ── 4.5 ProactiveHeartbeat — AI-initiated speaking (§T2.4) ─────
     # Enabled when DeepSeek API key is configured (proactive requires
@@ -809,7 +815,10 @@ async def run_voice_loop(
     # Track max duration
     t_start = time.monotonic()
 
-    print(f"\n{char_name} voice mode active | Ctrl+C to stop\n")
+    if voice_mode == "text":
+        print("\nTEXT MODE ACTIVE — waiting for chat input\n")
+    else:
+        print(f"\n{char_name} voice mode active | Ctrl+C to stop\n")
 
     # v5.x: Start VisualOrchestrator background poller (VLM preloaded)
     if _visual_orc.available:
