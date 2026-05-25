@@ -105,4 +105,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onBackendProgress: (callback) => {
     ipcRenderer.on('backend-progress', (_event, data) => callback(data));
   },
+
+  /**
+   * Show an informational message box in the config window.
+   * Returns the index of the clicked button.
+   */
+  showMessage: (msg) => ipcRenderer.invoke('show-message', msg),
+
+  /**
+   * Open a terminal window running the given command.
+   */
+  openTerminal: (cmd) => ipcRenderer.invoke('open-terminal', cmd),
 });

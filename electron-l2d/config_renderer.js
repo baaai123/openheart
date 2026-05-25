@@ -172,32 +172,21 @@
     });
   }
 
-  // ---- Start Backend button ----
+  // ---- Start Backend button (v4.5.0 §13 — informational) ----
 
   function initStartButton() {
     byId('btn-start').addEventListener('click', function () {
-      const btn = this;
-      btn.disabled = true;
-      btn.textContent = '⟳ Starting backend...';
-      updateProgress('Initializing...', 10);
+      const instructions =
+        'To start the Python backend, open a WSL terminal and run:\n\n' +
+        '  wsl bash /home/baaai/projects/openheart/run_backend.sh\n\n' +
+        'Or if running on Linux directly:\n\n' +
+        '  bash /home/baaai/projects/openheart/run_backend.sh\n\n' +
+        'The Live2D viewer connects via WebSocket once the backend is up.';
 
-      api.startBackend().then(function () {
-        updateProgress('Starting L2D...', 60);
-        return api.startL2D();
-      }).then(function () {
-        toast('Backend + L2D running');
-        updateProgress('Running', 100);
-        updateBackendStatus('running');
-        updateL2DStatus('running');
-        btn.textContent = '✓ RUNNING';
-      }).catch(function (err) {
-        console.warn('[config] start sequence failed:', err);
-        toast('Failed to start');
-        updateProgress('Failed', 0);
-        updateBackendStatus('stopped');
-        updateL2DStatus('stopped');
-        btn.disabled = false;
-        btn.textContent = '▶ START';
+      api.showMessage(instructions).then(function () {
+        if (api.openTerminal) {
+          api.openTerminal('bash /home/baaai/projects/openheart/run_backend.sh');
+        }
       });
     });
   }

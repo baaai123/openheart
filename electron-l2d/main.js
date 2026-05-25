@@ -1,5 +1,5 @@
 // v4.5.0 §13 — Electron main process with WebSocket bridge for Python<->Live2D IPC
-const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, dialog } = require('electron');
 
 // GPU fallback for systems without hardware acceleration
 app.commandLine.appendSwitch('enable-unsafe-swiftshader');
@@ -325,6 +325,37 @@ ipcMain.on('reconnect-ws', () => {
   console.log('[Config] WS reconnect requested');
   if (reconnectTimer) clearTimeout(reconnectTimer);
   connectWebSocket();
+});
+
+// ---- Informational dialogs (v4.5.0 §13) ----
+
+ipcMain.handle('show-message', async (_event, msg) => {
+  const result = await dialog.showMessageBox(configWindow, {
+    type: 'info',
+    title: 'OpenHeart Backend',
+    message: msg,
+    buttons: ['OK']
+  });
+  return result.response;
+});
+
+ipcMain.handle('open-terminal', async (_event, cmd) => {
+  const { exec } = require('child_process');
+  // Platform-aware terminal launcher
+  const platform = process.platform;
+  if (platform === 'linux') {
+    exec(`x-terminal-emulator -e bash -c "${cmd}; exec bash"`, (err) => {
+      if (err) console.warn('[Terminal] Failed to open x-terminal-emulator:', err.message);
+    });
+  } else if (platform === 'win32') {
+    exec(`start cmd /c "${cmd}"`, (err) => {
+      if (err) console.warn('[Terminal] Failed to open cmd:', err.message);
+    });
+  } else if (platform === 'darwin') {
+    exec(`open -a Terminal.app "${cmd}"`, (err) => {
+      if (err) console.warn('[Terminal] Failed to open Terminal.app:', err.message);
+    });
+  }
 });
 
 // ---- Backend control (v4.5.0 §13) ----
