@@ -134,7 +134,8 @@
     });
     await api.writePromptModules({ persona: config.systemPrompt });
     await api.writeUISettings({
-      visual_enabled: config.visualEnabled
+      visual_enabled: config.visualEnabled,
+      voice_mode: config.voiceMode
     });
   }
 

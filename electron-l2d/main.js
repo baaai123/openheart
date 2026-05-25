@@ -426,6 +426,7 @@ ipcMain.handle('write-ui-settings', async (_event, params) => {
     if (err.code !== 'ENOENT') console.warn('[write-ui-settings] Failed to read:', err.message);
   }
   if (params.visual_enabled !== undefined) data.visual_enabled = params.visual_enabled;
+  if (params.voice_mode !== undefined) data.voice_mode = params.voice_mode;
   fs.writeFileSync(uiPath, JSON.stringify(data, null, 2) + '\n', 'utf-8');
   console.log('[write-ui-settings] Written to', uiPath);
   return { success: true };
