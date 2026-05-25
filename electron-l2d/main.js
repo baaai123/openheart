@@ -357,7 +357,7 @@ ipcMain.handle('open-terminal', async (_event, cmd) => {
       if (err) console.warn('[Terminal] Failed to open x-terminal-emulator:', err.message);
     });
   } else if (platform === 'win32') {
-    exec(`start cmd /c "${cmd}"`, (err) => {
+    exec(`start cmd /k "${cmd}"`, (err) => {
       if (err) console.warn('[Terminal] Failed to open cmd:', err.message);
     });
   } else if (platform === 'darwin') {
