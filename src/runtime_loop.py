@@ -925,6 +925,7 @@ async def run_voice_loop(
 
     async def _handle_chat_text(text: str) -> None:
         """Process received chat text — transcript, L2D, shared ctx, state updates."""
+        nonlocal _transcript_initialized
         print(f"\n🎤 {text}")
         if _transcript is not None:
             _transcript.add_user_message(text)
@@ -936,6 +937,8 @@ async def run_voice_loop(
             _proactive.notify_user_speech()
         _state["speech_active"] = False
         _state["t1_api"] = time.perf_counter()
+
+    _transcript_initialized = False  # v4.5.0 §7.3.5 — initialized before main loop
 
     # ── 6. Main loop ───────────────────────────────────────────────
     try:
@@ -959,6 +962,7 @@ async def run_voice_loop(
                     logger.info("[键盘] 用户退出.")
                     break
                 _emotion = "neutral"
+                raw = ""  # v4.5.0 §0.6 — text mode: no ASR raw audio output
                 await _handle_chat_text(text)
             else:
                 # ASR mode: VAD-based utterance accumulation — buffer speech until silence timeout
@@ -970,6 +974,7 @@ async def run_voice_loop(
                             logger.info("[键盘] 用户退出.")
                             break
                         _emotion = "neutral"
+                        raw = ""  # v4.5.0 §0.6 — text mode: no ASR raw audio output
                         await _handle_chat_text(text)
                         # text processed — fall through to LLM pipeline
                     else:
@@ -1397,7 +1402,7 @@ async def run_voice_loop(
                         "Cold memory write failed — continuing without persistence. "
                         "error=%s trace_id=%s degraded=true",
                         exc,
-                        getattr(_store, "session_id", "unknown"),
+                        getattr(_session, "session_id", "unknown"),
                     )
 
             # v5.x — cached_visual_summary written by VisualOrchestrator poller; fusion fallback removed
@@ -1892,7 +1897,8 @@ async def run_voice_loop(
         if _voice is not None:
             await _voice.stop()
         # TTS thread pool cleanup (v4.5.0 §7.3.1)
-        _asr_pool.shutdown(wait=False)
+        if _asr_pool is not None:
+            _asr_pool.shutdown(wait=False)
 
         # v5.x — stop avatar (disabled, using Electron)
         try:
