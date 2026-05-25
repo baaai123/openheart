@@ -86,6 +86,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   reconnectWs: () => ipcRenderer.send('reconnect-ws'),
 
+  // ---- L2D window control (v4.5.0 §13) ----
+  startL2D: () => ipcRenderer.invoke('start-l2d'),
+
+  stopL2D: () => ipcRenderer.send('stop-l2d'),
+
   // ---- Backend control (v4.5.0 §13) ----
   startBackend: () => ipcRenderer.invoke('start-backend'),
 

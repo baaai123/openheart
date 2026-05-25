@@ -178,23 +178,26 @@
     byId('btn-start').addEventListener('click', function () {
       const btn = this;
       btn.disabled = true;
-      btn.textContent = '⟳ Starting...';
+      btn.textContent = '⟳ Starting backend...';
       updateProgress('Initializing...', 10);
 
-      api.startBackend().then(function (result) {
-        toast('Backend started');
+      api.startBackend().then(function () {
+        updateProgress('Starting L2D...', 60);
+        return api.startL2D();
+      }).then(function () {
+        toast('Backend + L2D running');
         updateProgress('Running', 100);
         updateBackendStatus('running');
         updateL2DStatus('running');
-        btn.textContent = '✓ BACKEND RUNNING';
+        btn.textContent = '✓ RUNNING';
       }).catch(function (err) {
-        console.warn('[config] startBackend failed:', err);
-        toast('Failed to start backend');
+        console.warn('[config] start sequence failed:', err);
+        toast('Failed to start');
         updateProgress('Failed', 0);
         updateBackendStatus('stopped');
         updateL2DStatus('stopped');
         btn.disabled = false;
-        btn.textContent = '▶ START BACKEND';
+        btn.textContent = '▶ START';
       });
     });
   }

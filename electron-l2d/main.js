@@ -392,14 +392,35 @@ ipcMain.handle('start-backend', async () => {
   });
 });
 
-app.whenReady().then(() => {
+// ---- L2D window control (v4.5.0 §13) ----
+// start-l2d: creates the Live2D render window (called when user clicks START)
+ipcMain.handle('start-l2d', async () => {
+  console.log('[IPC] start-l2d requested');
+  if (l2dWindow && !l2dWindow.isDestroyed()) {
+    console.log('[IPC] L2D window already exists, focusing');
+    l2dWindow.focus();
+    return { success: true, message: 'already_open' };
+  }
   createWindow();
+  return { success: true };
+});
+
+// stop-l2d: closes the Live2D render window
+ipcMain.on('stop-l2d', () => {
+  console.log('[IPC] stop-l2d requested');
+  if (l2dWindow && !l2dWindow.isDestroyed()) {
+    l2dWindow.close();
+  }
+});
+
+app.whenReady().then(() => {
   createConfigWindow();
   connectWebSocket();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+    // MacOS re-activate: re-open config panel, not L2D window
+    if (!configWindow || configWindow.isDestroyed()) {
+      createConfigWindow();
     }
   });
 });
