@@ -301,15 +301,19 @@ async def run_voice_loop(
     # ── 1. VoicePipeline (parec + ASR model) ──────────────────────
     # v4.5.0 §1.4.1 — SenseVoice ASR, v4.5.0 §1.4.2 — parec mic capture
     # v4.5.0 §0.6 — skip mic/ASR startup entirely in text mode; main loop polls chat queue
-    from src.voice_pipeline import VoicePipeline
-    _voice = VoicePipeline(config)
     if voice_mode != "text":
+        from src.voice_pipeline import VoicePipeline
+        _voice = VoicePipeline(config)
         await _voice.start()
+        asr_model = _voice.model
+        _asr_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="asr")
+        proc = _voice.proc
     else:
         print("TEXT MODE ACTIVE — mic/ASR startup skipped", flush=True)
-    asr_model = _voice.model
-    _asr_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="asr")
-    proc = _voice.proc
+        _voice = None
+        asr_model = None
+        _asr_pool = None
+        proc = None
 
     # v4.5.0 §0.6 — start voice API server (non-blocking background task)
     from src.config.api_server import set_voice_pipeline, set_config_change_callback, create_app as _create_api_app
@@ -934,7 +938,7 @@ async def run_voice_loop(
             else:
                 # ASR mode: VAD-based utterance accumulation — buffer speech until silence timeout
                 # v4.5.0 §0.6 — if voice pipeline is paused, poll chat queue for text input
-                if not _voice.voice_enabled:
+                if _voice is None or not _voice.voice_enabled:
                     text = await _poll_chat_queue()
                     if text:
                         if text.lower() in ("quit", "exit", "q"):
@@ -948,6 +952,7 @@ async def run_voice_loop(
                         continue
                 else:
                     # Normal ASR VAD: accumulate audio until silence, then run ASR
+                    if _voice is None: continue
                     raw_audio = await _voice.get_audio_chunk()
                     if not raw_audio:
                         logger.warning("parec stream ended — stopping.")
@@ -1859,7 +1864,8 @@ async def run_voice_loop(
         except Exception:
             pass
         # v4.5.0 §0.6 — Terminate parec subprocess via VoicePipeline
-        await _voice.stop()
+        if _voice is not None:
+            await _voice.stop()
         # TTS thread pool cleanup (v4.5.0 §7.3.1)
         _asr_pool.shutdown(wait=False)
 

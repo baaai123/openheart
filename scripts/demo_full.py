@@ -55,7 +55,7 @@ def main() -> None:
         help="Max runtime in seconds (0 = run until Ctrl+C)",
     )
     parser.add_argument(
-        "--voice-mode", choices=["asr", "text"], default="asr",
+        "--voice-mode", choices=["asr", "text"], default=None,
         help="Input mode: 'asr' for mic/speech, 'text' for /api/chat queue",
     )
     args = parser.parse_args()
