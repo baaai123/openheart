@@ -1,68 +1,60 @@
 @echo off
-title OpenHeart Launcher
+title OpenHeart
 setlocal enabledelayedexpansion
 
-REM ============================================================
-REM OpenHeart - Windows Batch Launcher
-REM ============================================================
-
-REM Fix UNC path: map to drive letter
+REM Find root: go up to the directory containing src/
 set "ROOT=%~dp0"
-pushd "%ROOT%" 2>nul
-if %errorlevel% neq 0 (
-    echo UNC path detected. Creating drive mapping...
-    subst Z: "%ROOT%"
-    Z:
-    set "ROOT=Z:\"
-)
+:findroot
+if exist "%ROOT%src\" goto root_found
+set "ROOT=%ROOT%..\"
+goto findroot
+:root_found
 cd /d "%ROOT%"
 
 echo ========================================
-echo   OpenHeart - Starting All Services
+echo   OpenHeart Launcher
 echo ========================================
 echo.
 
-REM [1/4] Start Electron L2D
-echo [1/4] Starting Electron L2D...
-if not exist "%ROOT%electron-l2d\node_modules" (
-    echo [ERROR] electron-l2d dependencies not installed.
-    echo   Run: cd electron-l2d ^&^& npm install
-    pause
-    exit /b 1
-)
-start "OpenHeart-L2D" cmd /c "cd /d %ROOT%electron-l2d && npm start"
-echo  - L2D app starting...
-echo.
-
-REM [2/4] Check Redis
-echo [2/4] Checking Redis...
-wsl redis-cli ping >nul 2>&1
-if %errorlevel% neq 0 (
-    echo  - Redis not running, starting via WSL...
-    start "OpenHeart-Redis" wsl redis-server
+REM [1] Electron L2D
+echo [1/4] Electron L2D...
+set "L2D=%ROOT%electron-l2d"
+if exist "%L2D%\package.json" (
+    if not exist "%L2D%\node_modules" (
+        echo   Installing npm dependencies...
+        cd /d "%L2D%"
+        call npm install
+        cd /d "%ROOT%"
+    )
+    start "L2D" cmd /c "cd /d %L2D% && npm start"
+    echo   L2D starting...
 ) else (
-    echo  - Redis already running.
+    echo   [SKIP] electron-l2d not found
 )
 echo.
 
-REM [3/4] Wait for startup
-echo [3/4] Waiting 4 seconds...
+REM [2] Docker
+echo [2/4] Docker services...
+docker compose up -d 2>nul
+if %errorlevel% equ 0 (
+    echo   Backend + Redis + Frontend started
+) else (
+    echo   [SKIP] Docker not available - run Python directly
+    start "Backend" cmd /c "cd /d %ROOT% && python scripts/demo_full.py"
+)
+echo.
+
+REM [3] Wait
+echo [3/4] Waiting 4s...
 timeout /t 4 /nobreak >nul
 echo.
 
-REM [4/4] Open frontend and start backend
-echo [4/4] Opening frontend + starting Python...
+REM [4] Frontend
+echo [4/4] Opening frontend...
 start "" "%ROOT%frontend\index.html"
 
 echo ========================================
-echo   Starting Python backend...
-echo   Press Ctrl+C to stop.
+echo   All services started!
+echo   Close this window to stop everything.
 echo ========================================
-python scripts/demo_full.py
-
-REM Cleanup drive mapping if used
-subst Z: /D >nul 2>&1
-if %errorlevel% neq 0 (
-    echo Backend exited with error code %errorlevel%
-    pause
-)
+pause
