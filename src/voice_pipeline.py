@@ -46,11 +46,11 @@ class VoicePipeline:
         v4.5.0 §1.4.2 -- parec subprocess, 16kHz mono S16LE
         """
         # --- Load ASR model (SenseVoice) ----------------------------
-        print("Loading SenseVoiceSmall (device=cuda:0) ...")
+        logger.info("Loading SenseVoiceSmall (device=cuda:0) ...")
         # v4.5.0 §1.4.1 -- SenseVoice via funasr, not AudioPipeline
         from funasr import AutoModel as SenseVoiceModel  # pyright: ignore[reportMissingImports]
         self.model = SenseVoiceModel(model="iic/SenseVoiceSmall", device="cuda:0")
-        print("ASR model ready.")
+        logger.info("ASR model ready.")
 
         # --- Start microphone capture (skip if proc injected for testing) ---
         if self.proc is None:
