@@ -1,19 +1,19 @@
-# OpenHeart Docker Compose — Infrastructure Services
-# v4.5.0 §0.2: Redis≥7.2 (with Stream), LanceDB≥0.6
-# v4.5.0 §3.2.2: AOF persistence, appendfsync everysec, max 30s data loss
-# v4.5.0 §3.2.3: Redis stores structured data only (JSON/Hash), not graph queries
+# OpenHeart Docker Compose — Full Stack v5.x
+# v5.x: OpenHeart service, Redis, Frontend
+# Requires nvidia-container-toolkit for GPU passthrough
 
 services:
+
   # ──────────────────────────────────────────────────────────────────
-  # Redis ≥7.2 — Hot Memory + State Bus (§3.2.1 – §3.2.3)
+  # Redis ≥7 — Hot Memory + State Bus (§3.2.1 – §3.2.3)
   # Stores: Scene JSON, entity Hash, context List, sync_queue Stream,
   #         moments, entity_graph, pending rules, health heartbeats
-  # AOF: appendfsync everysec → at most 30s data loss on crash (§1.6)
   # ──────────────────────────────────────────────────────────────────
   redis:
     image: redis:7.2-alpine
     container_name: openheart-redis
     restart: unless-stopped
+    profiles: ["infra"]
     ports:
       - "6379:6379"
     volumes:
@@ -42,64 +42,111 @@ services:
       - openheart-net
 
   # ──────────────────────────────────────────────────────────────────
-  # LanceDB ≥0.6 — Cold Memory, vector storage (§3.3)
-  # LanceDB is an EMBEDDED database — it runs in-process as a Python
-  # library (pip install lancedb), NOT as a standalone service.
-  # This entry is a placeholder that provides the data volume for
-  # persistence. The application manages LanceDB lifecycle internally.
+  # LanceDB ≥0.6 — Cold Memory, persistent data volume (§3.3)
+  # LanceDB runs in-process as a Python library — this container
+  # exists only to provide a persistent volume for /data/lancedb.
   # ──────────────────────────────────────────────────────────────────
   lancedb:
     image: alpine:3.19
     container_name: openheart-lancedb
-    command: |
-      sh -c '
-        echo "LanceDB is embedded — data volume mounted at /data/lancedb"
-        echo "Application manages LanceDB lifecycle in-process."
-        echo "Container exists only to provide persistent volume."
-        while true; do sleep 3600; done
-      '
     restart: unless-stopped
+    profiles: ["infra"]
+    command: >
+      sh -c 'mkdir -p /data/lancedb && while true; do sleep 3600; done'
     volumes:
       - lancedb-data:/data/lancedb
     healthcheck:
       test: ["CMD", "test", "-d", "/data/lancedb"]
       interval: 30s
-      timeout: 3s
+      timeout: 5s
       retries: 3
       start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - openheart-net
 
   # ──────────────────────────────────────────────────────────────────
-  # CosyVoice gRPC — TTS service placeholder (§7.4)
-  # Enables remote TTS synthesis via gRPC (primary), WebSocket (fallback).
-  # Uncomment and configure when CosyVoice-300M server is ready.
+  # OpenHeart — Main application service
+  # Builds from Dockerfile, mounts models cache, passes GPU
   # ──────────────────────────────────────────────────────────────────
-  # cosyvoice:
-  #   image: cosyvoice/cosyvoice:latest
-  #   container_name: openheart-cosyvoice
-  #   restart: unless-stopped
-  #   ports:
-  #     - "50051:50051"      # gRPC
-  #     - "8765:8765"        # WebSocket fallback
-  #   volumes:
-  #     - cosyvoice-models:/models
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]
-  #   healthcheck:
-  #     test: ["CMD", "grpc_health_probe", "-addr=:50051"]
-  #     interval: 15s
-  #     timeout: 5s
-  #     retries: 3
-  #   profiles:
-  #     - tts
-  #   networks:
-  #     - openheart-net
+  openheart:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openheart-app
+    restart: unless-stopped
+    profiles: ["app"]
+    ports:
+      - "9876:9876"
+      - "8080:8080"
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - OPENHEART_MODE=${OPENHEART_MODE:-mock}
+      - OPENHEART_VRAM_TIER=${OPENHEART_VRAM_TIER:-auto}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ./models:/app/models:ro
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./rules:/app/rules:ro
+      - openheart-cache:/app/cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9876/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      redis:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - openheart-net
+
+  # ──────────────────────────────────────────────────────────────────
+  # Frontend — Nginx serving control panel
+  # Serves frontend/index.html on port 80
+  # ──────────────────────────────────────────────────────────────────
+  frontend:
+    image: nginx:alpine
+    container_name: openheart-frontend
+    restart: unless-stopped
+    profiles: ["app"]
+    ports:
+      - "80:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      - openheart
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - openheart-net
 
 volumes:
   redis-data:
@@ -108,9 +155,9 @@ volumes:
   lancedb-data:
     name: openheart-lancedb-data
     driver: local
-  # cosyvoice-models:
-  #   name: openheart-cosyvoice-models
-  #   driver: local
+  openheart-cache:
+    name: openheart-cache
+    driver: local
 
 networks:
   openheart-net:
