@@ -12,8 +12,9 @@ echo Loading models (SenseVoice + CosyVoice3 + vLLM)...
 echo This may take 30-60 seconds on first launch.
 echo.
 
-:: Start WSL voice loop in a visible window
-start "OpenHeart Voice Engine" wsl -d Ubuntu -- bash -i -l -c "cd /home/baaai/projects/openheart && ./run.sh"
+:: Start WSL voice loop — derive project root from script location
+for %%I in ("%~dp0..") do set "PROJECT_ROOT=%%~fI"
+start "OpenHeart Voice Engine" wsl -d Ubuntu -- bash -i -l -c "cd '%PROJECT_ROOT%' && ./run.sh"
 
 echo Waiting for voice engine...
 

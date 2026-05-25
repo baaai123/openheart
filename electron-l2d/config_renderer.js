@@ -435,7 +435,7 @@
         api.startBackend();
         toast('Backend starting silently');
       } else {
-        toast('Run: wsl bash /home/baaai/projects/openheart/run_backend.sh');
+        toast('Run: wsl bash path/to/run_backend.sh');
       }
       btn.disabled = false;
       btn.textContent = '▶ START L2D';

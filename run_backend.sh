@@ -11,7 +11,10 @@ for arg in "$@"; do
 done
 set -- "${_PASSTHROUGH_ARGS[@]}"
 
-ENV_FILE="/home/baaai/projects/openheart/.env"
+# Resolve project root: env var overrides, otherwise derive from script location
+PROJECT_ROOT="${PROJECT_ROOT:-$(cd "$(dirname "$0")" && pwd)}"
+
+ENV_FILE="$PROJECT_ROOT/.env"
 
 # Source .env
 if [ -f "$ENV_FILE" ]; then
@@ -30,7 +33,7 @@ else
     conda activate cv311
 fi
 
-cd /home/baaai/projects/openheart
+cd "$PROJECT_ROOT"
 
 if $SILENT; then
     python -c "
