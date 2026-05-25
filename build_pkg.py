@@ -5,11 +5,12 @@ OpenHeart — PyInstaller Build Script
 Orchestrates the PyInstaller build using pyinstaller.spec.
 
 Usage:
-    python build_pkg.py                  # Default build
+    python build_pkg.py                  # Default build (console window shown)
     python build_pkg.py --clean          # Remove build/dist first
-    python build_pkg.py --console        # Show PyInstaller console output live
+    python build_pkg.py --console        # Show PyInstaller build output live
+    python build_pkg.py --noconsole      # Build silent exe (no console window)
     python build_pkg.py --name OpenHeart  # Override default exe name
-    python build_pkg.py --clean --console --name MyBuild
+    python build_pkg.py --clean --noconsole --name MyBuild
 """
 
 import argparse
@@ -74,7 +75,7 @@ def parse_args() -> argparse.Namespace:
         epilog=(
             "Examples:\n"
             "  python build_pkg.py\n"
-            "  python build_pkg.py --clean --console\n"
+            "  python build_pkg.py --clean --noconsole\n"
             "  python build_pkg.py --name OpenHeart\n"
         ),
     )
@@ -86,7 +87,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--console",
         action="store_true",
-        help="Show PyInstaller console output (by default it is captured).",
+        help="Show PyInstaller build output live (by default it is captured).",
+    )
+    parser.add_argument(
+        "--noconsole",
+        action="store_true",
+        help="Build executable without a console window (sets OPENHEART_CONSOLE=0).",
     )
     parser.add_argument(
         "--name",
@@ -137,7 +143,7 @@ def clean_build_artifacts() -> None:
 # ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
-def run_pyinstaller(console: bool, name_override: str) -> int:
+def run_pyinstaller(console: bool, name_override: str, noconsole: bool = False) -> int:
     """Execute pyinstaller pyinstaller.spec ... and return exit code."""
     cmd = [
         sys.executable or "python",
@@ -148,11 +154,13 @@ def run_pyinstaller(console: bool, name_override: str) -> int:
         "--noconfirm",               # Overwrite output without asking
     ]
 
-    # Pass name override via env var so the spec can read it if desired,
-    # AND modify the spec's EXE/COLLECT name inline for this build.
+    # Pass name override and noconsole via env vars so pyinstaller.spec
+    # can read them.  OPENHEART_CONSOLE=0 hides the exe console window.
     env = os.environ.copy()
     if name_override != DEFAULT_NAME:
         env["OPENHEART_EXE_NAME"] = name_override
+    if noconsole:
+        env["OPENHEART_CONSOLE"] = "0"
         # We also modify the spec temporarily: replace 'name="OpenHeart"'
         # in EXE() and COLLECT() calls.  Instead of patching the file,
         # we pass it through a sed-like replacement in memory via PyInstaller
@@ -293,7 +301,7 @@ def main() -> None:
 
     # Step 3: Build
     header("Building Executable")
-    exit_code = run_pyinstaller(args.console, args.name)
+    exit_code = run_pyinstaller(args.console, args.name, args.noconsole)
 
     if exit_code != 0:
         print()

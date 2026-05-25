@@ -141,7 +141,9 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,          # Show console window for CLI output
+    # OPENHEART_CONSOLE env var controls console window visibility.
+    # Set OPENHEART_CONSOLE=0 (e.g., via build_pkg.py --noconsole) to hide it.
+    console=os.environ.get("OPENHEART_CONSOLE", "1") == "1",
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
