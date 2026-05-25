@@ -26,9 +26,9 @@ r = client.chat.completions.create(model='deepseek-v4-flash', messages=[{'role':
 print('DEEPSEEK API OK')
 "
 
-# Start REST API server in background
+# Start REST API in background (non-critical, ignore errors)
 echo "=== Starting REST API on port 8081 ==="
-python frontend/server.py &
+python frontend/server.py > /tmp/openheart_api.log 2>&1 &
 API_PID=$!
 sleep 1
 
