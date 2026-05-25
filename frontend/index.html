@@ -63,6 +63,22 @@ header .spacer{flex:1}
   height:180px;border-top:1px solid var(--border);padding:12px 16px;
   overflow-y:auto;background:var(--surface);flex-shrink:0
 }
+.chat-input-bar{
+  display:flex;gap:8px;padding:10px 16px;
+  border-top:1px solid var(--border);background:var(--surface2);flex-shrink:0
+}
+.chat-input-bar input{
+  flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:6px;
+  background:var(--surface);color:var(--text);font-size:13px;outline:none
+}
+.chat-input-bar input:focus{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary-glow)}
+.chat-input-bar button{
+  padding:8px 16px;border:none;border-radius:6px;
+  background:var(--primary);color:#fff;font-size:13px;font-weight:600;cursor:pointer;
+  transition:opacity .2s
+}
+.chat-input-bar button:hover{opacity:.85}
+.chat-input-bar button:active{transform:scale(.97)}
 
 /* ── Cards ── */
 .card{
@@ -275,6 +291,12 @@ header .spacer{flex:1}
       <div id="chat-messages" style="display:none"></div>
     </div>
 
+    <!-- ── Chat input bar ── -->
+    <div class="chat-input-bar">
+      <input type="text" id="chat-input" placeholder="Type a message..." autocomplete="off">
+      <button id="chat-send-btn" onclick="sendChat()">Send</button>
+    </div>
+
     <div class="visual-area" id="visual-area">
       <div class="viz-grid">
         <div class="viz-col">
@@ -484,6 +506,40 @@ function addMessage(role, content, meta) {
   const area = document.getElementById('chat-area');
   area.scrollTop = area.scrollHeight;
 }
+
+// ── Send chat message ──
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  addMessage('user', text, 'sending...');
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text}),
+    });
+    const data = await resp.json();
+    if (resp.ok && data.status === 'queued') {
+      addMessage('system', 'Queued — waiting for backend to process', '');
+    } else {
+      addMessage('system', 'Error: ' + (data.message || resp.status), '');
+    }
+  } catch (err) {
+    addMessage('system', 'Network error — is the backend running?', '');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('chat-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendChat();
+    }
+  });
+});
 
 // ── Simulate visual detection updates ──
 

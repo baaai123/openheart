@@ -196,9 +196,21 @@ async def handle_config_post(request: web.Request) -> web.Response:
     if env_lines:
         _ENV_PATH.write_text("\n".join(env_lines) + "\n")
         os.environ["DEEPSEEK_API_KEY"] = data.get("api_key", os.environ.get("DEEPSEEK_API_KEY", ""))
-    # Write ui_settings.json
-    ui = {"visual_enabled": data.get("visual_enabled", True), "voice_mode": data.get("voice_mode", "asr")}
-    _CONFIG_PATH.write_text(json.dumps(ui))
+    # Write ui_settings.json — merge with existing to preserve voice_mode/visual_enabled
+    ui: dict[str, Any] = {}
+    if _CONFIG_PATH.exists():
+        try:
+            ui = json.loads(_CONFIG_PATH.read_text())
+        except Exception:
+            pass
+    if "visual_enabled" in data:
+        ui["visual_enabled"] = data["visual_enabled"]
+    if "voice_mode" in data:
+        ui["voice_mode"] = data["voice_mode"]
+    # Ensure defaults for missing keys
+    ui.setdefault("visual_enabled", True)
+    ui.setdefault("voice_mode", "asr")
+    _CONFIG_PATH.write_text(json.dumps(ui, indent=2))
     # Write persona
     if "persona" in data:
         prompt_path = ROOT.parent / "config" / "prompt_modules.json"

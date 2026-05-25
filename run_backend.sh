@@ -35,4 +35,14 @@ python frontend/server.py > /tmp/openheart_api.log 2>&1 &
 sleep 1
 
 echo "=== Starting main backend ==="
+# Translate --text-mode to --voice-mode text for demo_full.py
+_ARGS=()
+for arg in "$@"; do
+    if [ "$arg" = "--text-mode" ]; then
+        _ARGS+=(--voice-mode text)
+    else
+        _ARGS+=("$arg")
+    fi
+done
+set -- "${_ARGS[@]}"
 python scripts/demo_full.py "$@"

@@ -480,10 +480,16 @@ class DecisionBridge:
             except Exception:
                 pass
 
-            api_key = srv_cfg.get("apiKey") or self.config.deepseek_api_key
+            _raw_key = srv_cfg.get("apiKey") or self.config.deepseek_api_key
+            api_key = _raw_key.strip() if _raw_key else ""
+            _raw_url = srv_cfg.get("baseUrl") or self.config.deepseek_base_url or "https://api.deepseek.com/v1"
+            base_url = _raw_url.strip()
+            # Strip accidental `base_url:` prefix from config corruption
+            if base_url.startswith("base_url:"):
+                base_url = base_url[len("base_url:"):].strip()
             engine = DeepSeekDecision(
                 api_key=api_key,
-                base_url=srv_cfg.get("baseUrl") or self.config.deepseek_base_url or "https://api.deepseek.com/v1",
+                base_url=base_url,
                 model=srv_cfg.get("model") or self.config.deepseek_model or "deepseek-v4-flash",
                 system_prompt=srv_cfg.get("systemPrompt") or None,
             )

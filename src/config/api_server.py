@@ -204,19 +204,16 @@ async def post_config(request: web.Request) -> web.Response:
         else:
             _voice_pipeline_ref.pause()
 
-    # v4.5.0 §0.6 — persist voiceMode to ui_settings.json for runtime loop
-    if "voiceMode" in body:
+    # v4.5.0 §0.6 — persist ui settings to ui_settings.json for runtime loop
+    if "voiceMode" in body or "visualEnabled" in body:
         ui_config = _read_ui_config()
-        ui_config["voice_mode"] = body["voiceMode"]
+        if "voiceMode" in body:
+            ui_config["voice_mode"] = body["voiceMode"]
+        if "visualEnabled" in body:
+            ui_config["visual_enabled"] = body["visualEnabled"]
+            if _on_visual_enabled_change is not None:
+                _on_visual_enabled_change(body["visualEnabled"])
         _write_ui_config(ui_config)
-
-    # persist visualEnabled to ui_settings.json for runtime loop
-    if "visualEnabled" in body:
-        ui_config = _read_ui_config()
-        ui_config["visual_enabled"] = body["visualEnabled"]
-        _write_ui_config(ui_config)
-        if _on_visual_enabled_change is not None:
-            _on_visual_enabled_change(body["visualEnabled"])
 
     safe = {k: v for k, v in existing.items() if k != "apiKey"}
     _log.info("Config saved: %s", safe)

@@ -54,6 +54,10 @@ def main() -> None:
         "--timeout", type=float, default=0.0,
         help="Max runtime in seconds (0 = run until Ctrl+C)",
     )
+    parser.add_argument(
+        "--voice-mode", choices=["asr", "text"], default="asr",
+        help="Input mode: 'asr' for mic/speech, 'text' for /api/chat queue",
+    )
     args = parser.parse_args()
 
     if args.mode != "voice":
@@ -62,7 +66,7 @@ def main() -> None:
 
     config = RuntimeConfig.from_environ()
     char_name = _load_char_name()
-    asyncio.run(run_voice_loop(config=config, char_name=char_name, timeout=args.timeout))
+    asyncio.run(run_voice_loop(config=config, char_name=char_name, timeout=args.timeout, voice_mode=args.voice_mode))
 
 
 # v5.x: Limit vLLM GPU memory — two vLLM instances (TTS+VLM) share single GPU

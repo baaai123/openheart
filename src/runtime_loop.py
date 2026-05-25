@@ -165,7 +165,7 @@ async def run_voice_loop(
     char_name: str = "雪奈",
     timeout: float = 0.0,
     stop_event: Optional[asyncio.Event] = None,
-    voice_mode: str = "asr",
+    voice_mode: Optional[str] = None,
 ) -> None:
     """Run the full voice pipeline: mic → ASR → DeepSeek → CosyVoice → speaker.
 
@@ -180,6 +180,7 @@ async def run_voice_loop(
                     If None, SIGINT/SIGTERM will be handled internally.
         voice_mode: "asr" for microphone → ASR pipeline, "text" for /api/chat queue input.
                     When "text", reads from /tmp/openheart_chat_queue.jsonl written by /api/chat.
+                    If None, falls back to ui_settings.json, then "asr".
     """
     # Ensure CosyVoice monkeypatch is applied
     _ensure_cosyvoice_patched()
@@ -187,8 +188,10 @@ async def run_voice_loop(
     # ── 0. Load ui_settings.json for feature toggles ──────────────
     _ui_settings = _load_ui_settings()
     _visual_enabled = _ui_settings.get("visual_enabled", True)
-    # v4.5.0 §0.6 — voice_mode override from ui_settings.json (persisted by /api/config)
-    voice_mode = _ui_settings.get("voice_mode", voice_mode)
+    # v4.5.0 §0.6 — voice_mode: CLI arg > ui_settings.json > "asr" default
+    # CLI arg takes highest priority — only fall back to ui_settings if None
+    if voice_mode is None:
+        voice_mode = _ui_settings.get("voice_mode", "asr")
     logger.info("Config from ui_settings.json: visual_enabled=%s, voice_mode=%s", _visual_enabled, voice_mode)
 
     # v5.x ── VisualOrchestrator (replaces inline visual pipeline init) ──
