@@ -842,13 +842,8 @@ async def run_voice_loop(
             s = _last_samples[0]
             rms = float(np.sqrt(np.mean(s**2)))
             bar_len = min(int(rms * 50), 30)
-            bar = "█" * bar_len + "░" * (30 - bar_len)
             db = 20 * np.log10(max(rms, 1e-6))
-            print(
-                f"\n[mic] RMS={rms:.4f} ({db:+.0f}dB) |{bar}|  ",
-                end="",
-                flush=True,
-            )
+            logger.debug("mic RMS=%.4f (%+.0fdB)", rms, db)
 
     level_task = asyncio.create_task(_level_monitor())
     await asyncio.sleep(0)  # yield to let level_task run

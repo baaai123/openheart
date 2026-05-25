@@ -120,21 +120,21 @@ class ExecutionPipeline:
         torch.cuda.empty_cache()
 
         load_vllm = (self._config.vram_tier.value != "low")
-        print(f"Loading CosyVoice3-0.5B (nahida SFT speaker) … vLLM={load_vllm}")
+        logger.info("Loading CosyVoice3-0.5B (nahida SFT speaker) … vLLM=%s", load_vllm)
         self._tts_model = CosyVoice3(
             model_dir="models/Fun-CosyVoice3-0.5B", fp16=False, load_vllm=load_vllm
         )
         self._sample_rate = self._tts_model.sample_rate
-        print("CosyVoice3 ready. SFT speaker: nahida")
-        logger.info("CosyVoice3 backend: %s", "vLLM" if load_vllm else "PyTorch")
+        logger.info("CosyVoice3 ready. SFT speaker: nahida")
 
         # v4.5.0 §7.3 — VRAM BASELINE after CosyVoice3 load
         vram_free, vram_total = torch.cuda.mem_get_info()
-        print(f"[VRAM BASELINE] After CosyVoice3 load: {(vram_total - vram_free)/1e9:.1f}/{vram_total/1e9:.1f} GB used")
+        logger.info("VRAM after CosyVoice3 load: %.1f/%.1f GB used",
+                     (vram_total - vram_free) / 1e9, vram_total / 1e9)
 
         # ── TTS warmup SKIPPED (vLLM handles internally) ──
         torch.cuda.empty_cache()
-        print("TTS warmup (vLLM KV pre-alloc) …")
+        logger.info("TTS warmup (vLLM KV pre-alloc) …")
         try:
             list(self._tts_model.inference_sft(
                 self._nahida_prompt + "嗯。", spk_id="nahida", stream=True
@@ -142,9 +142,9 @@ class ExecutionPipeline:
             import torch
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
-            print("TTS warmup complete (vLLM KV pool allocated)")
+            logger.info("TTS warmup complete (vLLM KV pool allocated)")
         except Exception:
-            print("TTS warmup skipped (non-fatal)")
+            logger.info("TTS warmup skipped (non-fatal)")
 
 
     # ------------------------------------------------------------------
@@ -200,7 +200,7 @@ class ExecutionPipeline:
                 import torch
                 vram_free, _ = torch.cuda.mem_get_info()
                 if vram_free < 1.0 * 1024**3:
-                    print(f"[VRAM] Low headroom before TTS: {vram_free/1e9:.2f} GB free", file=sys.stderr)
+                    logger.warning("Low VRAM headroom before TTS: %.2f GB free", vram_free / 1e9)
                 # v5.x: Sync + defrag before TTS — ensure no visual GPU ops blocking
                 import torch as _torch
                 _torch.cuda.synchronize()  # wait for any pending GPU ops (visual/YOLOE)
@@ -219,11 +219,12 @@ class ExecutionPipeline:
                 _t_gen_setup = time.perf_counter() - _t_pre
                 for r in _gen:
                     if time.perf_counter() - _gen_start > _gen_timeout:
-                        print(f"[VRAM] TTS generation timeout after {_gen_timeout:.0f}s — forcing stop", file=sys.stderr)
+                        logger.warning("TTS generation timeout after %.0fs — forcing stop", _gen_timeout)
                         break
                     chunk = r["tts_speech"].squeeze().cpu().numpy()
                     if not sc:
-                        print(f"[PERF] TTS first-chunk: {time.perf_counter()-_t_tts_sent:.2f}s (setup={_t_gen_setup:.2f}s)", flush=True)
+                        logger.info("TTS first-chunk: %.2fs (setup=%.2fs)",
+                                     time.perf_counter() - _t_tts_sent, _t_gen_setup)
                     sc.append(chunk)
                     self._tts_n += 1
                     # v4.5.0 §7.3.4: Lip-sync callback — must be non-blocking, failure must not interrupt TTS
@@ -237,10 +238,7 @@ class ExecutionPipeline:
                 # self._tts_rendering = False  # TTS done, visual can resume
                 _tts_dur = time.perf_counter() - _t_tts_sent
 
-                print(
-                    f"[PERF] TTS sent ({len(sc)} chunks, {_tts_dur:.1f}s): {sent[:60]}",
-                    file=sys.stderr,
-                )
+                logger.info("TTS sent (%d chunks, %.1fs): %s", len(sc), _tts_dur, sent[:60])
 
 
 
@@ -271,9 +269,9 @@ class ExecutionPipeline:
                 if self._l2d_server is not None:
                     try:
                         self._l2d_server.send_start_signal(sent)
-                        print(f"[SIGNAL] start: {sent[:30]}", flush=True)
+                        logger.debug("SIGNAL start: %s", sent[:30])
                     except Exception as e:
-                        print(f"[SIGNAL] Failed: {e}", flush=True)
+                        logger.warning("SIGNAL start failed: %s", e)
                 # v5.x: Fire-and-forget paplay
                 self._prev_proc = _sp.Popen(["paplay", wpath])
                 # v5.x: Schedule async finish-signal task — cancels stale previous
@@ -316,7 +314,15 @@ class ExecutionPipeline:
         try:
             await asyncio.to_thread(proc.wait)
         except Exception as e:
-            print(f"[SIGNAL] Failed: {e}", flush=True)
+            logger.warning("SIGNAL wait failed: %s", e)
+            # paplay wait failure is non-critical
+
+        if self._l2d_server is not None:
+            try:
+                self._l2d_server.send_finish_signal()
+                logger.debug("SIGNAL finish")
+            except Exception as e:
+                logger.warning("SIGNAL finish failed: %s", e)
             # paplay wait failure is non-critical; still send finish
         await asyncio.sleep(0.5)  # Guarantee ≥0.5s mouth run — v5.x fix
         # Send finish signal AFTER audio completes — v5.x fix

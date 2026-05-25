@@ -317,7 +317,7 @@ class DeepSeekDecision:
                 tool_choice="auto",
             )
             _dt = time.monotonic() - _t0
-            print(f"[PERF-LLM] {_dt:.1f}s", flush=True)
+            logger.info("PERF-LLM %.1fs", _dt)
 
             choice = response.choices[0] if response.choices else None
             if choice is None or choice.message is None:
@@ -382,7 +382,7 @@ class DeepSeekDecision:
             extra_body={"thinking": {"type": "disabled"}},
         )
         _dt = time.monotonic() - _t0
-        print(f"[PERF-LLM] {_dt:.1f}s (final)", flush=True)
+        logger.info("PERF-LLM %.1fs (final)", _dt)
 
         choice = response.choices[0] if response.choices else None
         if choice is None or choice.message is None or choice.message.content is None:
@@ -486,14 +486,14 @@ class DeepSeekDecision:
                 )
             try:
                 _t0 = time.monotonic()
-                print(f"[LLM-CTX] msgs={len(messages) if messages else 0}", flush=True)
+                logger.info("LLM-CTX msgs=%d", len(messages) if messages else 0)
                 stream = await self._client.chat.completions.create(
                     model=self.model, messages=messages, stream=True,
                     stream_options={"include_usage": True},
                     extra_body={"thinking": {"type": "disabled"}},
                 )
                 _dt = time.monotonic() - _t0
-                print(f"[PERF-LLM] stream_decide: {_dt:.1f}s", flush=True)
+                logger.info("PERF-LLM stream_decide: %.1fs", _dt)
             except Exception as e:
                 import logging; logging.warning(f"DeepSeek stream error: {e}")
                 yield "嗯，我在听呢。", True
