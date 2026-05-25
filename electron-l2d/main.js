@@ -273,43 +273,53 @@ function stopHealthCheck() {
 
 ipcMain.handle('load-config', () => loadConfigFile());
 
-ipcMain.handle('save-config', (_event, { key, value }) => {
-  console.log('[Config] Save:', key, '=', value);
-  // Load current config, update key, persist
+ipcMain.handle('save-config', (_event, param) => {
+  console.log('[Config] Save:', param);
   const cfg = loadConfigFile();
-  cfg[key] = value;
-  saveConfigFile(cfg);
-  // Apply real-time effects for L2D window configs
-  switch (key) {
-    case 'width':
-    case 'height':
-      if (l2dWindow && !l2dWindow.isDestroyed()) {
-        const currentSize = l2dWindow.getSize();
-        const w = key === 'width' ? value : currentSize[0];
-        const h = key === 'height' ? value : currentSize[1];
-        l2dWindow.setSize(w, h);
-      }
-      break;
-    case 'alwaysOnTop':
-      if (l2dWindow && !l2dWindow.isDestroyed()) {
-        l2dWindow.setAlwaysOnTop(value, 'screen-saver');
-      }
-      break;
-    case 'clickThrough':
-      if (l2dWindow && !l2dWindow.isDestroyed()) {
-        l2dWindow.setIgnoreMouseEvents(value, { forward: true });
-      }
-      break;
-    case 'devTools':
-      break;
-    case 'wsHost':
-    case 'wsPort':
-      break;
-    default:
-      // Backend config keys (baseUrl, model, apiKey, systemPrompt,
-      // voiceEnabled, visualEnabled, l2dEnabled) are persisted to file
-      // but have no real-time Electron window effect — handled when backend starts
-      break;
+
+  if (param && param.key !== undefined) {
+    // Backward compat: old { key, value } call from other places
+    cfg[param.key] = param.value;
+    saveConfigFile(cfg);
+    // Apply real-time effects for L2D window configs (only old-format keys trigger these)
+    switch (param.key) {
+      case 'width':
+      case 'height':
+        if (l2dWindow && !l2dWindow.isDestroyed()) {
+          const currentSize = l2dWindow.getSize();
+          const w = param.key === 'width' ? param.value : currentSize[0];
+          const h = param.key === 'height' ? param.value : currentSize[1];
+          l2dWindow.setSize(w, h);
+        }
+        break;
+      case 'alwaysOnTop':
+        if (l2dWindow && !l2dWindow.isDestroyed()) {
+          l2dWindow.setAlwaysOnTop(param.value, 'screen-saver');
+        }
+        break;
+      case 'clickThrough':
+        if (l2dWindow && !l2dWindow.isDestroyed()) {
+          l2dWindow.setIgnoreMouseEvents(param.value, { forward: true });
+        }
+        break;
+      case 'devTools':
+        break;
+      case 'wsHost':
+      case 'wsPort':
+        break;
+      default:
+        // Backend config keys (baseUrl, model, apiKey, systemPrompt,
+        // voiceEnabled, visualEnabled, l2dEnabled) are persisted to file
+        // but have no real-time Electron window effect — handled when backend starts
+        break;
+    }
+  } else {
+    // New: full config object from config_renderer.js saveConfigToBackend IPC fallback
+    const backendKeys = ['baseUrl', 'model', 'apiKey', 'systemPrompt', 'voiceEnabled', 'visualEnabled', 'l2dEnabled', 'voiceMode'];
+    for (const k of backendKeys) {
+      if (k in param) cfg[k] = param[k];
+    }
+    saveConfigFile(cfg);
   }
   return { success: true };
 });

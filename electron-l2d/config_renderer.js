@@ -14,6 +14,7 @@
   // ---- Constants ----
   const BACKEND_API_BASE = 'http://localhost:8081';
   const STATUS_POLL_INTERVAL = 3000; // ms
+  const LOCAL_STORAGE_KEY = 'openheart_config';
 
   // ---- Helpers ----
 
@@ -79,40 +80,47 @@
     };
   }
 
-  // ---- Populate fields from GET /api/config ----
+  // ---- Populate fields from localStorage cache + GET /api/config ----
 
-  async function loadSettings() {
-    var cfg;
-    try {
-      cfg = await apiFetch('/api/config');
-    } catch (err) {
-      console.warn('[config] GET /api/config failed, using defaults:', err);
-      toast('Backend unreachable — using defaults');
-      return;
-    }
+  function applyConfig(cfg) {
     if (!cfg) return;
-
-    // API Config
     byId('api-baseurl').value = cfg.baseUrl || '';
     byId('api-model').value = cfg.model || '';
     byId('api-key').value = cfg.apiKey || '';
-
-    // Persona
     byId('persona-prompt').value = cfg.systemPrompt || '';
-
-    // Module switches (default on)
     setToggle('tog-voice', cfg.voiceEnabled !== false);
     setToggle('tog-visual', cfg.visualEnabled !== false);
     setToggle('tog-l2d', cfg.l2dEnabled !== false);
-
-    // Voice mode (default 'asr')
     var voiceModeEl = byId('voice-mode');
     if (voiceModeEl) {
       voiceModeEl.value = cfg.voiceMode === 'text' ? 'text' : 'asr';
     }
   }
 
-  // ---- Save full config to POST /api/config ----
+  async function loadSettings() {
+    // (1) Load cached config from localStorage immediately (fast, works offline)
+    var localCfg = loadFromLocalStorage();
+    if (localCfg) {
+      applyConfig(localCfg);
+    }
+
+    // (2) Try API for fresh config — overwrites localStorage values if successful
+    try {
+      var cfg = await apiFetch('/api/config');
+      if (cfg) {
+        applyConfig(cfg);
+        saveToLocalStorage(cfg);
+        return;
+      }
+    } catch (err) {
+      // Backend unreachable — keep localStorage values if available
+      if (!localCfg) {
+        toast('Backend unreachable — using defaults');
+      }
+    }
+  }
+
+  // ---- Save full config with fallback chain: API → Electron IPC → localStorage ----
 
   var _saveInFlight = false;
 
@@ -121,13 +129,52 @@
     _saveInFlight = true;
     var config = collectConfig();
     try {
+      // (1) Try POST to API first
       await apiFetch('/api/config', { method: 'POST', body: JSON.stringify(config) });
-      toast('Config saved');
-    } catch (err) {
-      console.warn('[config] POST /api/config failed:', err);
-      toast('Failed to save config');
+      // Also save to localStorage so page load works when backend is down
+      saveToLocalStorage(config);
+      toast('Saved to backend');
+    } catch (_apiErr) {
+      // API failed (backend not running) — fall back to Electron IPC
+      console.warn('[config] POST /api/config failed, trying IPC fallback:', _apiErr);
+      try {
+        if (api && api.saveConfig) {
+          await api.saveConfig(config);
+          saveToLocalStorage(config);
+          toast('Saved locally (backend not running)');
+        } else {
+          throw new Error('electronAPI.saveConfig not available');
+        }
+      } catch (_ipcErr) {
+        // IPC also failed — last resort: localStorage only
+        console.warn('[config] IPC saveConfig failed, using localStorage:', _ipcErr);
+        saveToLocalStorage(config);
+        toast('Saved locally (backend not running)');
+      }
     } finally {
       _saveInFlight = false;
+    }
+  }
+
+  // ---- localStorage helpers ----
+
+  function saveToLocalStorage(config) {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(config));
+    } catch (_e) {
+      // localStorage full or disabled — non-critical, swallow silently
+      console.warn('[config] localStorage write failed:', _e);
+    }
+  }
+
+  function loadFromLocalStorage() {
+    try {
+      var raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (_e) {
+      // Corrupted data or localStorage disabled — ignore
+      console.warn('[config] localStorage read failed:', _e);
+      return null;
     }
   }
 
