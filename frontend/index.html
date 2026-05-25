@@ -126,6 +126,8 @@ header .spacer{flex:1}
 .start-btn .spinner{display:none;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite}
 .start-btn.running .spinner{display:block}
 .start-btn.running .label-text{opacity:.7}
+.start-btn.alive{background:linear-gradient(135deg,var(--accent),#00b894);pointer-events:none;cursor:default}
+.start-btn.alive:hover{filter:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* ── Progress Bar ── */
@@ -315,6 +317,11 @@ function saveConfig() {
     apiKey: document.getElementById('api-key').value
   };
   localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+
+  // FUTURE: POST config to a local endpoint once one exists
+  // Example: fetch('http://localhost:9876/api/config', { method:'POST',
+  //   headers:{'Content-Type':'application/json'}, body:JSON.stringify(config) })
+
   showToast('Config saved to localStorage');
 }
 
@@ -358,11 +365,9 @@ function showToast(msg) {
   toastEl._hide = setTimeout(() => { toastEl.style.opacity = '0'; }, 2000);
 }
 
-// ── Backend Start with Fake Progress ──
+// ── Backend Start — Health Check ──
 
 let backendRunning = false;
-let progressInterval = null;
-let progressPhase = 0;
 
 function startBackend() {
   const btn = document.getElementById('start-btn');
@@ -372,50 +377,53 @@ function startBackend() {
 
   if (backendRunning) return;
   backendRunning = true;
+
+  // Save API config to localStorage before checking backend
+  saveConfig();
+
   btn.classList.add('running');
-  btn.querySelector('.label-text').textContent = 'Starting...';
+  btn.querySelector('.label-text').textContent = 'Checking backend...';
   wrap.classList.add('visible');
+  fill.style.width = '20%';
+  text.textContent = 'Checking if backend is already running...';
 
-  progressPhase = 0;
-  fill.style.width = '0%';
+  // Remove stale instruction or alive badge
+  const oldInstr = document.getElementById('backend-instructions');
+  if (oldInstr) oldInstr.remove();
+  btn.classList.remove('alive');
+  btn.style.pointerEvents = '';
 
-  const stages = [
-    { at: 8, label: 'Loading config...' },
-    { at: 18, label: 'Initializing models...' },
-    { at: 30, label: 'Loading Whisper...' },
-    { at: 42, label: 'Loading Qwen2.5...' },
-    { at: 55, label: 'Starting CosyVoice...' },
-    { at: 65, label: 'Connecting Redis...' },
-    { at: 75, label: 'Starting Live2D thread...' },
-    { at: 85, label: 'Warming up pipelines...' },
-    { at: 94, label: 'Almost ready...' },
-  ];
+  // Health check with 4s timeout
+  // v4.5.0 §0.3 — unified health endpoint on port 9876
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-  let stageIdx = 0;
-  let currentProgress = 0;
-  const stepDuration = 400;
+  fetch('http://localhost:9876/health', {
+    signal: controller.signal,
+    mode: 'no-cors',  // Avoid CORS issues on localhost cross-port requests
+  })
+  .then(() => {
+    // Server responded → backend is already running
+    clearTimeout(timeoutId);
+    completeStartup();
+  })
+  .catch(() => {
+    // Connection refused / timeout → backend not running
+    clearTimeout(timeoutId);
+    backendRunning = false;
+    btn.classList.remove('running');
+    btn.querySelector('.label-text').textContent = '▶ Retry';
+    fill.style.width = '50%';
+    text.innerHTML = '⚠️ Backend not detected on port 9876';
 
-  progressInterval = setInterval(() => {
-    if (stageIdx < stages.length) {
-      const target = stages[stageIdx].at;
-      if (currentProgress < target) {
-        currentProgress += Math.max(0.5, (target - currentProgress) / 4);
-      } else {
-        text.textContent = stages[stageIdx].label;
-        stageIdx++;
-      }
-    } else {
-      if (currentProgress < 98) {
-        currentProgress += 0.3;
-      } else {
-        clearInterval(progressInterval);
-        progressInterval = null;
-        completeStartup();
-        return;
-      }
-    }
-    fill.style.width = Math.min(currentProgress, 99) + '%';
-  }, stepDuration);
+    const instr = document.createElement('div');
+    instr.id = 'backend-instructions';
+    instr.style.cssText = 'margin-top:8px;padding:10px;background:var(--surface2);border:1px solid var(--warn);border-radius:6px;font-size:12px;line-height:1.5';
+    instr.innerHTML = '<div style="color:var(--warn);font-weight:600;margin-bottom:4px">📋 To start the backend:</div>' +
+      '<code style="display:block;padding:6px 8px;background:var(--bg);border-radius:4px;font-family:var(--mono);font-size:12px;color:var(--text)">wsl bash /home/baaai/projects/openheart/run_backend.sh</code>' +
+      '<div style="margin-top:4px;color:var(--text2);font-size:11px">Then click <strong>Retry</strong> above.</div>';
+    wrap.parentNode.insertBefore(instr, wrap.nextSibling);
+  });
 }
 
 function completeStartup() {
@@ -424,19 +432,19 @@ function completeStartup() {
   const btn = document.getElementById('start-btn');
 
   fill.style.width = '100%';
-  text.textContent = '✅ Backend ready!';
+  text.textContent = '✅ Backend Running';
+
+  btn.querySelector('.label-text').textContent = '● Running';
+  btn.classList.remove('running');
+  btn.classList.add('alive');
+  btn.style.pointerEvents = 'none';
 
   setStatus('voice', true);
   setStatus('visual', true);
   setStatus('l2d', true);
   setStatus('asr', true);
 
-  setTimeout(() => {
-    btn.classList.remove('running');
-    btn.querySelector('.label-text').textContent = '● Running';
-  }, 500);
-
-  addMessage('assistant', 'System ready. How can I help you?', 'system');
+  addMessage('assistant', 'Backend is running. How can I help you?', 'system');
 }
 
 function setStatus(module, online) {
