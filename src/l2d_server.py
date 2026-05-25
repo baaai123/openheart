@@ -31,6 +31,8 @@ class Live2DServer:
         self._ready = asyncio.Event()
 
     async def start(self):
+        import logging as _ws_log
+        _ws_log.getLogger("websockets").setLevel(logging.WARNING)
         import websockets
         self._server = await websockets.serve(
             self._handler, "0.0.0.0", self._port)
@@ -62,7 +64,8 @@ class Live2DServer:
                             exc_info=True)
         finally:
             # Client disconnected or handler terminated — remove from broadcast list
-            self._clients.remove(websocket)
+            if websocket in self._clients:
+                self._clients.remove(websocket)
             logger.info("L2D client disconnected (total=%d)", len(self._clients))
 
     async def wait_ready(self, timeout: float = 10.0) -> bool:
@@ -85,11 +88,8 @@ class Live2DServer:
             try:
                 await ws.send(payload)
             except Exception:
-                logger.warning(
-                    "L2D broadcast: removing disconnected client",
-                    exc_info=True,
-                )
-                self._clients.remove(ws)
+                # Client disconnected — _handler.finally handles removal
+                pass
 
     def set_expression(self, name: str):
         """Send expression command to L2D (non-blocking)."""

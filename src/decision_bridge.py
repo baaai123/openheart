@@ -15,6 +15,7 @@ v4.5.0 §5: Decision → Execution
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -709,8 +710,16 @@ class DecisionBridge:
         recent = self.conversation_history  # v5.x: no limit — ContextAssembler handles token budget
         if recent:
             recent_lines = []
+            # Read persona config to decide role label — use "雪奈" only if persona is configured
+            _pm_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'prompt_modules.json')
+            try:
+                with open(_pm_path) as _f:
+                    _pm = json.load(_f)
+                _assistant_label = "雪奈" if (_pm.get("persona") or "").strip() else "助手"
+            except Exception:
+                _assistant_label = "助手"  # safe fallback: generic label
             for msg in recent:
-                role = "用户" if msg.get("role") == "user" else "雪奈"
+                role = "用户" if msg.get("role") == "user" else _assistant_label
                 recent_lines.append(f"{role}: {msg.get('content', '')}")
             parts.append("[最近对话]\n" + "\n".join(recent_lines))
 
@@ -1301,10 +1310,16 @@ class DecisionBridge:
         if self.decision_engine is None:
             return ""
 
-        instruction = (
-            f"用户刚才说：{user_input}。"
-            f"请用雪奈的语气简短回复，15字以内，不要括号动作描写。"
-        )
+        instruction = f"用户刚才说：{user_input}。"
+        # Only inject 雪奈 tone instruction if persona is configured
+        _pm_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'prompt_modules.json')
+        try:
+            with open(_pm_path) as _f:
+                _pm = json.load(_f)
+            if (_pm.get("persona") or "").strip():
+                instruction += "请用雪奈的语气简短回复，15字以内，不要括号动作描写。"
+        except Exception:
+            pass  # no persona configured, skip tone instruction
         if self._personality_state:
             instruction += f" 当前状态：{self._personality_state}"
 

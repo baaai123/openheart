@@ -120,6 +120,15 @@ class ExecutionPipeline:
         torch.cuda.empty_cache()
 
         load_vllm = (self._config.vram_tier.value != "low")
+        if load_vllm:
+            try:
+                import vllm  # noqa: F401  # pyright: ignore[reportUnusedImport]
+            except ImportError:
+                logger.warning(
+                    "vllm not installed (environment.yml specifies vllm==0.11.2) — "
+                    "falling back to PyTorch mode for CosyVoice3 TTS"
+                )
+                load_vllm = False
         logger.info("Loading CosyVoice3-0.5B (nahida SFT speaker) … vLLM=%s", load_vllm)
         self._tts_model = CosyVoice3(
             model_dir="models/Fun-CosyVoice3-0.5B", fp16=False, load_vllm=load_vllm

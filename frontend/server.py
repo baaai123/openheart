@@ -330,7 +330,18 @@ def main():
     print(f"  L2D WS proxy      → ws://localhost:{args.l2d_port}\n")
 
     app = make_app(args.l2d_port)
-    web.run_app(app, host="0.0.0.0", port=args.port)
+    try:
+        web.run_app(app, host="0.0.0.0", port=args.port)
+    except OSError as exc:
+        if exc.errno in (98, 48):  # EADDRINUSE on Linux/macOS
+            _log.error(
+                "Port %d already in use — kill stale process or use --port",
+                args.port,
+            )
+            print(f"\nERROR: Port {args.port} is already in use.")
+            print(f"Kill the occupying process or use --port to specify a different port.\n")
+            sys.exit(1)
+        raise
 
 
 if __name__ == "__main__":

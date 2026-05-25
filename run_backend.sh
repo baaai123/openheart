@@ -85,7 +85,7 @@ fi
 
 # [3/5] Start REST API server
 ! $SILENT && echo "[3/5] Starting REST API server on port 8081..."
-python frontend/server.py > /tmp/openheart_api.log 2>&1 &
+python frontend/server.py --port 8081 > /tmp/openheart_api.log 2>&1 &
 sleep 1
 
 # Poll REST API until ready (max 30s)
