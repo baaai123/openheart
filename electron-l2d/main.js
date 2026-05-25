@@ -372,7 +372,8 @@ ipcMain.handle('open-terminal', async (_event, cmd) => {
 ipcMain.handle('write-env', async (_event, params) => {
   // params: { DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL }
   // Read-modify-write .env file (KEY=VALUE format, one per line)
-  const envPath = path.join(__dirname, '..', '.env');
+  // Write to WSL path so the backend (running in WSL) can read it (v4.5.0 §13)
+  const envPath = '\\\\wsl.localhost\\Ubuntu\\home\\baaai\\projects\\openheart\\.env';
   let content = '';
   try {
     content = fs.readFileSync(envPath, 'utf-8');
@@ -398,7 +399,8 @@ ipcMain.handle('write-env', async (_event, params) => {
 });
 
 ipcMain.handle('write-prompt-modules', async (_event, params) => {
-  const pmPath = path.join(__dirname, '..', 'config', 'prompt_modules.json');
+  // Write to WSL path so the backend (running in WSL) can read it (v4.5.0 §13)
+  const pmPath = '\\\\wsl.localhost\\Ubuntu\\home\\baaai\\projects\\openheart\\config\\prompt_modules.json';
   let data = {};
   try {
     data = JSON.parse(fs.readFileSync(pmPath, 'utf-8'));
@@ -415,7 +417,8 @@ ipcMain.handle('write-prompt-modules', async (_event, params) => {
 });
 
 ipcMain.handle('write-ui-settings', async (_event, params) => {
-  const uiPath = path.join(__dirname, '..', 'config', 'ui_settings.json');
+  // Write to WSL path so the backend (running in WSL) can read it (v4.5.0 §13)
+  const uiPath = '\\\\wsl.localhost\\Ubuntu\\home\\baaai\\projects\\openheart\\config\\ui_settings.json';
   let data = {};
   try {
     data = JSON.parse(fs.readFileSync(uiPath, 'utf-8'));

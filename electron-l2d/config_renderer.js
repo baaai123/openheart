@@ -411,12 +411,24 @@
     byId('btn-start').addEventListener('click', async function () {
       var btn = this;
       btn.disabled = true;
-      btn.textContent = '⏳ Saving config...';
 
-      // 1. POST current config to backend
+      // 1. Collect current config from form
+      var config = collectConfig();
+
+      // 2. Save to local persistence (Electron userData + localStorage)
+      btn.textContent = '⏳ Saving config...';
       await saveConfigToBackend();
 
-      // 2. Open WSL terminal to start backend
+      // 3. Write config files to WSL so the backend can read .env and config files
+      btn.textContent = '⏳ Writing WSL config...';
+      try {
+        await writeConfigFilesViaIPC(config);
+      } catch (err) {
+        console.warn('[config] WSL config write failed:', err);
+        toast('Warning: WSL config write failed');
+      }
+
+      // 4. Open WSL terminal to start backend
       btn.textContent = '⏳ Opening terminal...';
       if (api.openTerminal) {
         api.openTerminal('wsl bash /home/baaai/projects/openheart/run_backend.sh');
