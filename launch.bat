@@ -1,5 +1,6 @@
 @echo off
 title OpenHeart
+setlocal enabledelayedexpansion
 
 echo OpenHeart Launcher v5.x
 echo ==============================
@@ -18,7 +19,7 @@ echo.
 echo [PY] Starting Python backend...
 echo ==============================
 echo.
-wsl bash -c "cd /home/baaai/projects/openheart export PATH=/home/baaai/miniforge3/envs/cv311/bin:$PATH && cd /home/baaai/projects/openheart && pythonexport PATH=/home/baaai/miniforge3/envs/cv311/bin:$PATH && cd /home/baaai/projects/openheart && python /home/baaai/miniforge3/envs/cv311/bin/python scripts/demo_full.py 2>&1"
+wsl -e /home/baaai/miniforge3/envs/cv311/bin/python /home/baaai/projects/openheart/scripts/demo_full.py
 echo.
 echo Python backend exited.
 pause
