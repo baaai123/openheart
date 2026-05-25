@@ -75,5 +75,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   onModelReady: (callback) => {
     ipcRenderer.on('model-ready', () => callback());
-  }
+  },
+
+  // ---- Config window bridge methods (v4.5.0 §7.3.4) ----
+  loadConfig: () => ipcRenderer.invoke('load-config'),
+
+  saveConfig: (param) => ipcRenderer.invoke('save-config', param),
+
+  sendExpression: (name) => ipcRenderer.send('send-expression', name),
+
+  reconnectWs: () => ipcRenderer.send('reconnect-ws'),
 });

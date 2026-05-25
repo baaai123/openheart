@@ -15,6 +15,7 @@ const ENABLE_GLOBAL_TRACKING = true;
 const CURSOR_POLL_MS = 33;
 
 let l2dWindow = null;
+let configWindow = null;
 let ws = null;
 let reconnectTimer = null;
 let cursorInterval = null;
@@ -100,7 +101,31 @@ function createWindow() {
 
   l2dWindow.on('closed', () => {
     stopGlobalCursorTracking();
+    if (configWindow && !configWindow.isDestroyed()) {
+      configWindow.close();
+    }
     l2dWindow = null;
+  });
+}
+
+// ---- Config/control panel window ----
+function createConfigWindow() {
+  configWindow = new BrowserWindow({
+    width: 400,
+    height: 600,
+    title: 'OpenHeart Control Panel',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: false
+    }
+  });
+
+  configWindow.loadFile(path.join(__dirname, 'config.html'));
+
+  configWindow.on('closed', () => {
+    configWindow = null;
   });
 }
 
@@ -164,8 +189,67 @@ ipcMain.on('ready', () => {
   });
 });
 
-app.whenReady().then(() => {
+// ---- IPC: Config window handlers ----
+ipcMain.handle('load-config', () => ({
+  wsHost: WS_HOST,
+  wsPort: WS_PORT,
+  width: 500,
+  height: 900,
+  alwaysOnTop: true,
+  clickThrough: true,
+  devTools: false,
+  modelPath: './models/xiaoyue/xiaoyue.model3.json'
+}));
+
+ipcMain.handle('save-config', (_event, { key, value }) => {
+  console.log('[Config] Save:', key, '=', value);
+  switch (key) {
+    case 'width':
+    case 'height':
+      if (l2dWindow && !l2dWindow.isDestroyed()) {
+        const currentSize = l2dWindow.getSize();
+        const w = key === 'width' ? value : currentSize[0];
+        const h = key === 'height' ? value : currentSize[1];
+        l2dWindow.setSize(w, h);
+      }
+      break;
+    case 'alwaysOnTop':
+      if (l2dWindow && !l2dWindow.isDestroyed()) {
+        l2dWindow.setAlwaysOnTop(value, 'screen-saver');
+      }
+      break;
+    case 'clickThrough':
+      if (l2dWindow && !l2dWindow.isDestroyed()) {
+        l2dWindow.setIgnoreMouseEvents(value, { forward: true });
+      }
+      break;
+    case 'devTools':
+      break;
+    case 'wsHost':
+    case 'wsPort':
+      break;
+    default:
+      console.warn('[Config] Unknown key:', key);
+  }
+  return { success: true };
+});
+
+ipcMain.on('send-expression', (_event, name) => {
+  console.log('[Config] Expression:', name);
+  if (l2dWindow && !l2dWindow.isDestroyed()) {
+    l2dWindow.webContents.send('expression', { name });
+  }
+});
+
+ipcMain.on('reconnect-ws', () => {
+  console.log('[Config] WS reconnect requested');
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  connectWebSocket();
+});
+
+
   createWindow();
+  createConfigWindow();
   connectWebSocket();
 
   app.on('activate', () => {
