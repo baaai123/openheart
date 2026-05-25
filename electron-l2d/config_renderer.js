@@ -324,18 +324,16 @@
       // 1. POST current config to backend
       await saveConfigToBackend();
 
-      // 2. Start backend via IPC
-      btn.textContent = '⏳ Starting...';
-      try {
-        await api.startBackend();
-        toast('Backend starting...');
-      } catch (err) {
-        console.warn('[config] startBackend failed:', err);
-        toast('Failed to start backend');
-      } finally {
-        btn.disabled = false;
-        btn.textContent = '▶ START L2D';
+      // 2. Open WSL terminal to start backend
+      btn.textContent = '⏳ Opening terminal...';
+      if (api.openTerminal) {
+        api.openTerminal('wsl bash /home/baaai/projects/openheart/run_backend.sh');
+        toast('Backend starting in WSL terminal');
+      } else {
+        toast('Run: wsl bash /home/baaai/projects/openheart/run_backend.sh');
       }
+      btn.disabled = false;
+      btn.textContent = '▶ START L2D';
     });
   }
 
