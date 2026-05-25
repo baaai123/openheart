@@ -426,12 +426,6 @@
         statusEl.title = 'Trying: ' + attemptedUrl + '\nError: ' + err.message;
       }
     }
-  }
-    } catch (err) {
-      // Backend unreachable → both offline
-      updateBackendStatus('offline');
-      updateL2DStatus('offline');
-    }
 
     // Poll AI Backend REST API separately on port 8081
     try {
