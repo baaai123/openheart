@@ -902,9 +902,10 @@ async def run_voice_loop(
                 if not line:
                     continue
                 try:
-                    entry = json.loads(line)
+                    import json as _json
+                    entry = _json.loads(line)
                     candidate = entry.get("text", "")
-                except json.JSONDecodeError:
+                except _json.JSONDecodeError:
                     # v4.5.0 — malformed JSON lines dropped (won't retry, file is gone)
                     continue
                 if candidate:
@@ -1439,7 +1440,7 @@ async def run_voice_loop(
                     try:
                         _action_json = json.loads(_mouse_match.group(1))
                         reply = reply.replace(_mouse_match.group(0), "").strip()
-                    except json.JSONDecodeError:
+                    except _json.JSONDecodeError:
                         pass
 
             # Legacy <action> tag fallback
@@ -1448,7 +1449,7 @@ async def run_voice_loop(
                 if _action_match:
                     try:
                         _action_json = json.loads(_action_match.group(1))
-                    except json.JSONDecodeError:
+                    except _json.JSONDecodeError:
                         pass
 
             _actions = {
