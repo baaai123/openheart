@@ -341,6 +341,7 @@ class ProactiveHeartbeat:
             silent_turn += "）"
 
         # ── 3. Ask dialog persona to speak or stay silent ──────────
+        hist_copy = self._get_conversation_history() or []
         try:
             response = ""
             async for token, is_done in self._decision_engine.stream_decide(
