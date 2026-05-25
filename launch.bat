@@ -1,15 +1,13 @@
 @echo off
 title OpenHeart
+
 echo OpenHeart Launcher v5.x
 echo ==============================
 echo.
 
-REM Check if VcXsrv is running
-echo Checking display server...
-wsl bash -c "export DISPLAY=:0 && xset q >nul 2>&1 && echo 'OK' || echo 'Start VcXsrv first'"
+REM Start desktop UI in a visible WSL terminal
+start "OpenHeart-UI" wsl bash -c "export DISPLAY=:0 && source /home/baaai/miniforge3/etc/profile.d/conda.sh && conda activate cv311 && python /home/baaai/projects/openheart/frontend/desktop_ui.py; read -p 'Press Enter to close...'"
 
-echo.
-echo Starting Desktop UI...
-wsl bash -c "export DISPLAY=:0 && source /home/baaai/miniforge3/etc/profile.d/conda.sh && conda activate cv311 && python /home/baaai/projects/openheart/frontend/desktop_ui.py"
-echo.
+echo Desktop UI launched in WSL window.
+echo Check the WSL window for any errors.
 pause
