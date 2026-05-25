@@ -19,7 +19,7 @@ echo.
 echo [PY] Starting Python backend...
 echo ==============================
 echo.
-wsl -e /home/baaai/miniforge3/envs/cv311/bin/python /home/baaai/projects/openheart/scripts/demo_full.py
+wsl bash /home/baaai/projects/openheart/run_backend.sh
 echo.
 echo Python backend exited.
 pause
