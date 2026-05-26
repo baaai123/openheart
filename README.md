@@ -3,7 +3,7 @@
 <p align="center"><strong>有温度的 AI 虚拟伙伴 — A Virtual Companion That Cares</strong></p>
 
 <p align="center">
-  <em>本地 GPU 运行 · 语音对话 · 屏幕感知 · 主动话题 · Live2D 形象 · 可教学</em>
+  <em>本地 GPU 运行 · 语音对话 · 屏幕感知 · 主动话题 · 桌面前端 · 可教学</em>
 </p>
 
 <p align="center">
@@ -23,6 +23,7 @@ OpenHeart 不只是又一个 AI 聊天机器人。她是一个**本地运行、�
 - 🧠 **五层记忆系统** — Redis 热记忆 → LanceDB 持久化冷记忆 → 用户画像 → 记忆衰减 → 自然语言回忆
 - 🔥 **主动话题** — 内心独白 + 退火状态机，她会在你不说话时主动开口，且懂得控制频率
 - 🎭 **Live2D 虚拟形象** — Electron + PixiJS 渲染，嘴型同步、视线跟随、表情控制、点击穿透
+- 🖥️ **桌面前端** — Electron 桌面应用，Live2D 形象渲染 + 后台管理 + 配置面板，一键启停
 - 🎓 **可教学** — 用自然语言教她新行为：「记住，以后我说X你就做Y」
 - ⚡ **VRAM 自适应** — 自动检测显存，低/中/高三个档位自动调整模型加载策略
 
@@ -79,41 +80,54 @@ OpenHeart 不只是又一个 AI 聊天机器人。她是一个**本地运行、�
 - [x] 内心独白（thinking_persona）→ 场景感知 → 自主判断
 - [x] mic 独立线程 + asyncio 2s 心跳
 
-### 🎭 Live2D 形象
-- [x] Electron + PixiJS + pixi-live2d-display（Cubism 4）
-- [x] WebSocket 桥接到 Python
-- [x] 嘴型同步、视线跟随、表情控制
-- [x] 透明窗口 + 点击穿透模式
-- [x] 文本气泡回退（FallbackTextBubble）
+### 🖥️ 桌面前端（electron-l2d/）
+
+基于 Electron 构建的完整桌面应用，位于 `electron-l2d/`：
+
+**Live2D 形象窗口**
+- [x] PixiJS v7 + pixi-live2d-display + Cubism 4 渲染
+- [x] 500×900 透明悬浮窗 + 点击穿透模式
+- [x] WebSocket（端口 9876）实时桥接 Python 后端
+- [x] 嘴型同步（根据语音音量）
+- [x] 视线跟随（全局鼠标追踪，33ms 轮询）
+- [x] 表情控制
+- [x] GPU 软件回退（SwiftShader）
+
+**后台管理面板**
+- [x] 后端进程一键启停
+- [x] API 密钥 / 模型 / 端点配置
+- [x] 后端状态实时监控（running/stopped）
+- [x] Voice / Visual 开关
+- [x] 持久化配置（JSON 文件保存）
+- [x] WebSocket 断线自动重连
+- [x] 暗色主题 UI
 
 ### 🎓 教学系统
 - [x] 自然语言教学 → 规则创建（OBSERVATION）
 - [x] 3 次命中 → 自动晋升 CORE 规则
 - [x] 教学模块（TeachingModule）+ 规则学习器（RuleLearner）
 
-### 🖥️ 控制面板
-- [x] Web 前端（FastAPI 服务 + HTML 面板）
-- [x] 启动/停止/状态监控
-- [x] 启动日志实时显示
-
 ---
 
 ## 🏗️ 系统架构
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     OpenHeart Runtime                        │
+┌──────────────────────────────────────────────────────────────┐
+│               🖥️  Electron 桌面前端 (electron-l2d/)           │
+│        Live2D 渲染 · 管理面板 · 后端管理 · WebSocket IPC        │
+├──────────────────────────────────────────────────────────────┤
+│                     OpenHeart Runtime                         │
 ├───────────┬──────────┬──────────┬───────────┬───────────────┤
 │ Perception│  Fusion  │  Memory  │ Decision  │  Execution    │
 │           │          │          │           │               │
 │ • ASR     │ • Scene  │ • HOT    │ • LLM     │ • TTS         │
 │ • Vision  │   → Text │ • WARM   │ • Rules   │ • Mouse       │
-│ • OCR     │ • Fusion │ • CORE   │ • Safety  │ • Avatar      │
-│ • Mouse   │   Pipe   │ • COLD   │ • Teach   │ • Overlay     │
+│ • OCR     │ • Fusion │ • CORE   │ • Safety  │ • Overlay     │
+│           │   Pipe   │ • COLD   │ • Teach   │               │
 │           │          │ • DEEP   │ • Easter  │               │
 ├───────────┴──────────┴──────────┴───────────┴───────────────┤
 │  Personality  │  Proactive   │  Prediction  │  Heartbeat     │
-└─────────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────────┘
 ```
 
 核心数据流：`Mic → VAD → ASR → DecisionBridge → CosyVoice → Speaker`
@@ -184,25 +198,35 @@ bash scripts/setup_env.sh
 
 ### 5. 运行 OpenHeart
 
-**语音模式**（mic → ASR → LLM → TTS → 扬声器）：
+**方式一：桌面前端（推荐）**
+
+直接用 `electron-l2d/` 桌面应用一键启动：
+
+```bash
+# 在 electron-l2d/ 目录下
+npm install
+npm start
+```
+
+桌面应用会自动管理 Python 后端进程的启停，无需手动运行脚本。
+
+**方式二：命令行运行**
+
+语音模式（mic → ASR → LLM → TTS → 扬声器）：
 
 ```bash
 python scripts/demo_full.py
 ```
 
-**文本模式**（键盘输入，不需要麦克风）：
+文本模式（键盘输入，不需要麦克风）：
 
 ```bash
 python scripts/demo_full.py --voice-mode text
 ```
 
-### 6. （可选）Live2D 形象 + 控制面板
+**方式三：Web 控制面板**
 
 ```bash
-# 终端 1：Live2D 形象
-cd electron-l2d && npm install && npm start
-
-# 终端 2：Web 控制面板
 python frontend/server.py
 # 浏览器打开 http://localhost:8000
 ```
@@ -262,6 +286,15 @@ OpenHeart 默认角色为 **雪奈（Yukina）** —— 一个毒舌傲娇 + 雌
 
 ```
 openheart/
+├── electron-l2d/          # 🖥️ 桌面前端（Electron 应用）
+│   ├── main.js            #   主进程：窗口管理 + WebSocket
+│   ├── renderer.js        #   Live2D PixiJS 渲染引擎
+│   ├── config.html        #   后台管理面板
+│   ├── index.html         #   Live2D 形象窗口
+│   └── l2d_client.py      #   Python WebSocket 客户端
+├── frontend/              # Web 控制面板（备用）
+│   ├── server.py          #   FastAPI 后端
+│   └── index.html         #   控制面板页面
 ├── src/
 │   ├── perception/       # 感知层：ASR + 视觉 + OCR
 │   │   └── visual/       #   YOLOE 检测、VLM、空间图谱
@@ -283,8 +316,6 @@ openheart/
 │   └── infra/            # 基础设施：追踪、校验
 ├── config/               # YAML/JSON 配置文件（15 个）
 ├── rules/                # 规则定义（core/interactive/user_taught）
-├── frontend/             # Web 控制面板
-├── electron-l2d/         # Live2D Electron 渲染
 ├── scripts/              # 启动脚本 & 工具
 │   └── demo_full.py      # 主入口
 ├── tests/                # 测试（unit/integration/contracts/smoke）
