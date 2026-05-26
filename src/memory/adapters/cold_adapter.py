@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 
 from src.memory.adapters._protocol import StoreAdapter
 from src.memory.cold.memory_store import ColdMemoryStore, Scene
+from src.memory.events import MemoryEvent
 from src.memory.tier_types import TierLevel, TieredRecord
 
 logger = logging.getLogger(__name__)
@@ -115,3 +116,52 @@ class ColdMemoryAdapter(StoreAdapter):
                 )
             )
         return results
+
+    # ------------------------------------------------------------------
+    # store_event / query_events interface (v5.x memory redesign §3)
+    # ------------------------------------------------------------------
+
+    @property
+    def adapter_name(self) -> str:
+        return "cold"
+
+    def store_event(self, event: MemoryEvent) -> bool:
+        # v5.x memory-redesign §3 — stores MemoryEvent directly in LanceDB.
+        try:
+            if self._store._table is None:
+                logger.warning(
+                    "ColdMemoryAdapter.store_event: table not initialized",
+                )
+                return False
+            asyncio.run(self._store._table.add([event.to_dict()]))
+            return True
+        except Exception:
+            return False
+
+    def query_events(self, text="", tags=None, tier=None, limit=10):
+        # v5.x memory-redesign §3 — semantic search or full scan of memory events.
+        try:
+            table = self._store._table
+            if table is None:
+                logger.warning(
+                    "ColdMemoryAdapter.query_events: table not initialized",
+                )
+                return []
+
+            async def _search():
+                if text:
+                    query_builder = await table.search(text)
+                    return await query_builder.limit(limit).to_list()
+                else:
+                    df = await table.to_pandas()
+                    return df.to_dict("records")[:limit]
+
+            results = asyncio.run(_search())
+            events = [MemoryEvent.from_dict(r) for r in results]
+            if tags:
+                events = [e for e in events if set(tags) & set(e.tags)]
+            if tier is not None:
+                events = [e for e in events if e.tier == tier]
+            return events[:limit]
+        except Exception:
+            return []

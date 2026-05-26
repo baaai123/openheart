@@ -7,10 +7,12 @@ and .query().  Ensures connect() is called before any store_scene operation.
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
 from src.memory.adapters._protocol import StoreAdapter
+from src.memory.events import MemoryEvent
 from src.memory.hot.memory_store import HotMemoryStore
 from src.memory.tier_types import TierLevel, TieredRecord
 
@@ -86,3 +88,58 @@ class RedisAdapter(StoreAdapter):
     def disconnect(self) -> None:
         self._store.disconnect()
         self._connected = False
+
+    # ------------------------------------------------------------------
+    # store_event / query_events interface (v5.x memory redesign §3)
+    # ------------------------------------------------------------------
+
+    @property
+    def adapter_name(self) -> str:
+        return "redis"
+
+    def store_event(self, event: MemoryEvent) -> bool:
+        # v5.x memory-redesign §3 — serialise MemoryEvent to JSON, persist in Redis.
+        try:
+            self._ensure_connected()
+            key = f"mem:event:{event.event_id}"
+            data = json.dumps(event.to_dict(), ensure_ascii=False, default=str)
+            # pyright: ignore[reportUnknownMemberType]
+            self._store._redis.set(key, data)
+            return True
+        except Exception:
+            logger.warning(
+                "RedisAdapter.store_event failed for event_id=%s",
+                event.event_id,
+                exc_info=True,
+            )
+            return False
+
+    def query_events(self, text="", tags=None, tier=None, limit=10):
+        # v5.x memory-redesign §3 — scan Redis keys for MemoryEvent records.
+        try:
+            self._ensure_connected()
+            # pyright: ignore[reportUnknownMemberType]
+            keys = self._store._redis.keys("mem:event:*")
+            results: list[MemoryEvent] = []
+            for key in keys:
+                # pyright: ignore[reportUnknownMemberType]
+                data = self._store._redis.get(key)
+                if not data:
+                    continue
+                event = MemoryEvent.from_dict(json.loads(data))
+                if text and text.lower() not in event.summary.lower():
+                    continue
+                if tags and not (set(tags) & set(event.tags)):
+                    continue
+                if tier is not None and event.tier != tier:
+                    continue
+                results.append(event)
+                if len(results) >= limit:
+                    break
+            return results
+        except Exception:
+            logger.warning(
+                "RedisAdapter.query_events failed",
+                exc_info=True,
+            )
+            return []
