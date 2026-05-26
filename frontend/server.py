@@ -248,6 +248,30 @@ async def handle_chat(request: web.Request) -> web.Response:
     return web.json_response({"status": "queued"})
 
 
+_REPLY_FILE = Path("/tmp/openheart_last_reply.txt")
+
+
+async def handle_get_reply(request: web.Request) -> web.Response:
+    """GET /api/reply — return the latest LLM reply text, then clear it.
+
+    Reads /tmp/openheart_last_reply.txt and returns the content.
+    The file is emptied after read to prevent re-delivery.
+    Returns {"reply": "...", "available": true} or {"reply": null, "available": false}.
+    """
+    try:
+        if _REPLY_FILE.stat().st_size == 0:
+            return web.json_response({"reply": None, "available": False})
+        text = _REPLY_FILE.read_text(encoding="utf-8")
+        # Clear to prevent re-delivery
+        _REPLY_FILE.write_text("", encoding="utf-8")
+        return web.json_response({"reply": text, "available": True})
+    except FileNotFoundError:
+        return web.json_response({"reply": None, "available": False})
+    except OSError as exc:
+        _log.warning("Failed to read reply file: %s", exc)
+        return web.json_response({"reply": None, "available": False})
+
+
 # ── Live2D WebSocket proxy ─────────────────────────────────────────
 
 class L2DProxy:
@@ -311,6 +335,7 @@ def make_app(l2d_port: int = 9876) -> web.Application:
     app.router.add_post("/api/scan", handle_scan_text)
     app.router.add_post("/api/scan-file", handle_scan_file)
     app.router.add_post("/api/chat", handle_chat)
+    app.router.add_get("/api/reply", handle_get_reply)
     app.router.add_get("/api/config", handle_config_get)
     app.router.add_post("/api/config", handle_config_post)
 

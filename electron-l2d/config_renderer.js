@@ -532,8 +532,21 @@
         method: 'POST',
         body: JSON.stringify({ text: text })
       });
-      var reply = (res && res.reply) || (res && res.text) || JSON.stringify(res);
-      appendChatMessage('bot', reply);
+      if (res && res.status === 'queued') {
+        // Server queued the request — poll for reply (§4.2)
+        appendChatMessage('bot', 'Thinking...');
+        try {
+          var reply = await pollForReply();
+          _chatMessages[_chatMessages.length - 1] = { role: 'bot', text: reply };
+          refreshChatLog();
+        } catch (pollErr) {
+          _chatMessages[_chatMessages.length - 1] = { role: 'error', text: 'Reply timeout: ' + pollErr.message };
+          refreshChatLog();
+        }
+      } else {
+        var reply = (res && res.reply) || (res && res.text) || JSON.stringify(res);
+        appendChatMessage('bot', reply);
+      }
     } catch (err) {
       appendChatMessage('error', 'Request failed: ' + err.message);
     } finally {
@@ -541,6 +554,37 @@
       sendBtn.disabled = false;
       input.focus();
     }
+  }
+
+  // Poll GET /api/reply every 1s, max 30s
+  async function pollForReply() {
+    var maxTime = 30000;
+    var interval = 1000;
+    var startTime = Date.now();
+
+    while (Date.now() - startTime < maxTime) {
+      await new Promise(function (r) { setTimeout(r, interval); });
+      try {
+        var res = await apiFetch('/api/reply', { method: 'GET' });
+        if (res && (res.reply || res.text)) {
+          return res.reply || res.text;
+        }
+      } catch (pollErr) {
+        console.warn('[config] Reply poll failed:', pollErr.message);
+      }
+    }
+    throw new Error('Reply not received within 30s');
+  }
+
+  function refreshChatLog() {
+    var log = byId('chat-log');
+    if (!log) return;
+    log.innerHTML = _chatMessages.map(function (m) {
+      var cls = m.role === 'user' ? 'chat-msg user' : m.role === 'error' ? 'chat-msg error' : 'chat-msg bot';
+      var label = m.role === 'user' ? 'You' : m.role === 'error' ? 'Error' : 'AI';
+      return '<div class="' + cls + '"><div class="sender">' + label + '</div>' + escapeHtml(m.text) + '</div>';
+    }).join('');
+    log.scrollTop = log.scrollHeight;
   }
 
   function initChat() {

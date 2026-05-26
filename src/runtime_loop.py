@@ -184,6 +184,10 @@ async def run_voice_loop(
     """
     # Ensure CosyVoice monkeypatch is applied
     _ensure_cosyvoice_patched()
+    try:
+        import huggingface_hub
+        huggingface_hub.cached_download = huggingface_hub.hf_hub_download
+    except: pass
 
     # ── 0. Load ui_settings.json for feature toggles ──────────────
     _ui_settings = _load_ui_settings()
@@ -953,6 +957,10 @@ async def run_voice_loop(
                         break
                 if not text:
                     continue
+                # v4.5.0 §0.6 — Skip short/noise text (mirrors ASR path len<2 check)
+                if len(text) < 2:
+                    logger.debug("Text mode skipped short input (%d chars)", len(text))
+                    continue
                 if text.lower() in ("quit", "exit", "q"):
                     logger.info("[键盘] 用户退出.")
                     break
@@ -1320,9 +1328,25 @@ async def run_voice_loop(
             # v5.x: session owns conversation state
             _session.conversation_history.append({"role": "user", "content": _user_text})
             _session.conversation_history.append({"role": "assistant", "content": reply})
-            # v5.x: No truncation — conversation_history grows unbounded
+            # v5.x: Write latest reply for GET /api/reply endpoint
+            _REPLY_FILE = Path("/tmp/openheart_last_reply.txt")
+            try:
+                _REPLY_FILE.write_text(reply, encoding="utf-8")
+            except OSError:
+                logger.warning("Failed to write reply file for /api/reply")
+            # v4.5.0 §5.4 — Cap history at 40 turns to prevent unbounded growth
+            _MAX_HISTORY_TURNS = 40
+            _TRUNCATION_KEEP_HEAD = 10
+            _TRUNCATION_KEEP_TAIL = 20
+            if len(_session.conversation_history) > _MAX_HISTORY_TURNS:
+                head = _session.conversation_history[:_TRUNCATION_KEEP_HEAD]
+                tail = _session.conversation_history[-_TRUNCATION_KEEP_TAIL:]
+                _session.conversation_history = head + tail
             # Sync legacy bridge for remaining refs
             _bridge.conversation_history = list(_session.conversation_history)
+
+            # v4.5.0 §5 — Clear consumed input from SharedContext to prevent stale reuse
+            shared_ctx.set(NS_PERCEPTION, "last_asr_text", "")
 
             # Full speech cycle done
 

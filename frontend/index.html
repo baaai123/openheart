@@ -175,6 +175,15 @@ header .spacer{flex:1}
   border-bottom-left-radius:4px
 }
 .msg .meta{font-size:11px;color:var(--muted);margin-top:3px;padding:0 4px}
+.msg.system .bubble{
+  background:transparent;color:var(--muted);font-size:12px;
+  border:1px dashed var(--border);padding:6px 12px
+}
+.typing-indicator{display:inline-flex;gap:4px;align-items:center;padding:8px 14px}
+.typing-indicator span{width:7px;height:7px;border-radius:50%;background:var(--muted);animation:typing 1.4s infinite ease-in-out}
+.typing-indicator span:nth-child(2){animation-delay:.2s}
+.typing-indicator span:nth-child(3){animation-delay:.4s}
+@keyframes typing{0%,60%,100%{opacity:.3;transform:scale(.8)}30%{opacity:1;transform:scale(1.2)}}
 
 /* ── Visual Preview ── */
 .viz-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;height:100%}
@@ -481,7 +490,7 @@ function setStatus(module, online) {
 
 // ── Chat ──
 
-function addMessage(role, content, meta) {
+function addMessage(role, content, meta, id) {
   const container = document.getElementById('chat-messages');
   const empty = document.getElementById('empty-state');
   if (empty) empty.style.display = 'none';
@@ -489,10 +498,11 @@ function addMessage(role, content, meta) {
 
   const msg = document.createElement('div');
   msg.className = 'msg ' + role;
+  if (id) msg.id = id;
 
   const bubble = document.createElement('div');
   bubble.className = 'bubble';
-  bubble.textContent = content;
+  if (content) bubble.textContent = content;
   msg.appendChild(bubble);
 
   if (meta) {
@@ -509,11 +519,32 @@ function addMessage(role, content, meta) {
 
 // ── Send chat message ──
 
+let _pollAbort = false;  // set true to stop polling (e.g., on error)
+
+async function pollReply(maxAttempts = 30) {
+  // Poll GET /api/reply every 2s. Returns reply text or null after timeout.
+  for (let i = 0; i < maxAttempts; i++) {
+    if (_pollAbort) return null;
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const resp = await fetch('/api/reply');
+      const data = await resp.json();
+      if (data.available && data.reply) {
+        return data.reply;
+      }
+    } catch (err) {
+      // network transient — keep polling
+    }
+  }
+  return null;
+}
+
 async function sendChat() {
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
+  _pollAbort = false;
   addMessage('user', text, 'sending...');
   try {
     const resp = await fetch('/api/chat', {
@@ -523,11 +554,27 @@ async function sendChat() {
     });
     const data = await resp.json();
     if (resp.ok && data.status === 'queued') {
-      addMessage('system', 'Queued — waiting for backend to process', '');
+      // Show thinking indicator while polling
+      const thinkingId = 'thinking-' + Date.now();
+      addMessage('assistant', '', 'typing', thinkingId);
+      const typingEl = document.querySelector('#' + thinkingId + ' .bubble');
+      if (typingEl) {
+        typingEl.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+      }
+      const reply = await pollReply();
+      // Remove thinking indicator
+      const thinkingMsg = document.getElementById(thinkingId);
+      if (thinkingMsg) thinkingMsg.remove();
+      if (reply) {
+        addMessage('assistant', reply, '');
+      } else {
+        addMessage('system', 'No reply received within timeout — check backend logs', '');
+      }
     } else {
       addMessage('system', 'Error: ' + (data.message || resp.status), '');
     }
   } catch (err) {
+    _pollAbort = true;
     addMessage('system', 'Network error — is the backend running?', '');
   }
 }

@@ -198,46 +198,57 @@ class ConversationOrchestrator:
         )
         if pending_teaching is not None and self._teaching is not None:
             try:
-                pending_rule: dict[str, Any] = pending_teaching.get("rule", {})
-                rule_text: str = (
-                    pending_rule.get("condition_pattern", "")
-                    or pending_rule.get("trigger_phrase", "")
-                    or str(pending_rule)
-                )
-                confirm_prompt: str = (
-                    f"上一轮用户教你一个规则：{rule_text}。"
-                    f"现在用户说：'{user_input}'。"
-                    f"请判断用户是确认、否认还是说了无关内容，并自然回应。"
-                )
-                confirm_reply: str = await self._call_llm_nonstreaming(
-                    user_message=confirm_prompt,
-                    conversation_messages=_hist,
-                    trace_id=trace_id,
-                )
-                if confirm_reply:
-                    intent: str = self._parse_confirmation_intent(confirm_reply)
-                    if intent == "confirmed":
-                        rule_id: str = pending_teaching.get("rule_id", "")
-                        if rule_id:
-                            try:
-                                await self._teaching.confirm_rule(rule_id)
-                            except Exception:
-                                # v4.5.0 §5.7.4: confirm_rule failure logged
-                                logger.warning(
-                                    "ConversationOrchestrator: confirm_rule failed "
-                                    "(trace_id=%s, rule_id=%s)",
-                                    trace_id, rule_id, exc_info=True,
-                                )
-                        self._session.pending_teaching = None
-                        return DecisionResult(
-                            reply=confirm_reply, trace_id=trace_id, source="teaching",
-                        )
-                    elif intent == "denied":
-                        self._session.pending_teaching = None
-                        return DecisionResult(
-                            reply=confirm_reply, trace_id=trace_id, source="teaching",
-                        )
-                    # "other" → fall through (pending TTL handles expiry)
+                # v4.5.0 §5.7.4: Track stale-pending turns to prevent deadlock
+                pending_teaching.setdefault("_turn_count", 0)
+                if pending_teaching["_turn_count"] >= 3:
+                    logger.warning(
+                        "Teaching confirmation expired after %d turns "
+                        "(trace_id=%s) — clearing pending_teaching",
+                        pending_teaching["_turn_count"], trace_id,
+                    )
+                    self._session.pending_teaching = None
+                else:
+                    pending_rule: dict[str, Any] = pending_teaching.get("rule", {})
+                    rule_text: str = (
+                        pending_rule.get("condition_pattern", "")
+                        or pending_rule.get("trigger_phrase", "")
+                        or str(pending_rule)
+                    )
+                    confirm_prompt: str = (
+                        f"上一轮用户教你一个规则：{rule_text}。"
+                        f"现在用户说：'{user_input}'。"
+                        f"请判断用户是确认、否认还是说了无关内容，并自然回应。"
+                    )
+                    confirm_reply: str = await self._call_llm_nonstreaming(
+                        user_message=confirm_prompt,
+                        conversation_messages=_hist,
+                        trace_id=trace_id,
+                    )
+                    if confirm_reply:
+                        intent: str = self._parse_confirmation_intent(confirm_reply)
+                        if intent == "confirmed":
+                            rule_id: str = pending_teaching.get("rule_id", "")
+                            if rule_id:
+                                try:
+                                    await self._teaching.confirm_rule(rule_id)
+                                except Exception:
+                                    # v4.5.0 §5.7.4: confirm_rule failure logged
+                                    logger.warning(
+                                        "ConversationOrchestrator: confirm_rule failed "
+                                        "(trace_id=%s, rule_id=%s)",
+                                        trace_id, rule_id, exc_info=True,
+                                    )
+                            self._session.pending_teaching = None
+                            return DecisionResult(
+                                reply=confirm_reply, trace_id=trace_id, source="teaching",
+                            )
+                        elif intent == "denied":
+                            self._session.pending_teaching = None
+                            return DecisionResult(
+                                reply=confirm_reply, trace_id=trace_id, source="teaching",
+                            )
+                        # "other" → increment turn count and fall through
+                        pending_teaching["_turn_count"] += 1
             except Exception:
                 # v4.5.0 §5: Teaching confirmation failure must not block LLM.
                 logger.debug(
