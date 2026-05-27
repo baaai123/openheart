@@ -170,7 +170,13 @@
     if (!res.ok) {
       var body;
       try { body = await res.text(); } catch (_) { body = ''; }
-      throw new Error('API ' + res.status + ' ' + res.statusText + (body ? ': ' + body : ''));
+      // v4.5.0 — cached backend failed for this path (e.g. /api/chat on port 8082
+      // that only has config/status endpoints). Clear cache and retry all ports.
+      console.warn('[config] apiFetch cached base', primaryBase, 'failed for', path,
+                   '— clearing cache and retrying all ports. Error:', res.status, body.slice(0, 120));
+      _activeBackendBase = null;
+      _activeBackendPort = null;
+      return apiFetch(path, options);
     }
     if (res.status === 204) return null;
     return res.json();

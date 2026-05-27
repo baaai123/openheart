@@ -385,7 +385,7 @@ ipcMain.handle('write-env', async (_event, params) => {
   }
   const lines = content ? content.split('\n') : [];
   const updateLine = (prefix, value) => {
-    if (!value && value !== '') return; // skip undefined/null — leave existing value
+    if (!value || (typeof value === 'string' && value.trim() === '')) return; // skip empty — keep existing
     const idx = lines.findIndex(l => l.startsWith(prefix + '='));
     const newLine = prefix + '=' + value;
     if (idx >= 0) lines[idx] = newLine;
