@@ -135,7 +135,7 @@ OpenHeart 不只是又一个 AI 聊天机器人。她是一个**本地运行、�
 ### 1. 克隆并配置环境
 
 ```bash
-git clone https://github.com/baaai/openheart.git
+git clone https://github.com/baaai123/openheart.git
 cd openheart
 
 # Conda 环境
