@@ -6,11 +6,7 @@
   <em>本地 GPU 运行 · 语音对话 · 屏幕感知 · 主动话题 · 桌面前端 · 可教学</em>
 </p>
 
-<p align="center">
-  <a href="https://github.com/baaai/openheart"><img src="https://img.shields.io/badge/Python-3.11+-blue?logo=python" alt="Python"></a>
-  <a href="https://github.com/baaai/openheart"><img src="https://img.shields.io/badge/Platform-Linux%20%7C%20WSL2-orange" alt="Platform"></a>
-  <a href="https://github.com/baaai/openheart/blob/main/LICENSE"><img src="https://img.shields.io/github/license/baaai/openheart" alt="License"></a>
-</p>
+
 
 ---
 
